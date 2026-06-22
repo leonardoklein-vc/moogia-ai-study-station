@@ -1,0 +1,279 @@
+<script>
+/* ==========================================================================
+   ESTAÇÃO DE ESTUDOS IA - CORE E NAVEGAÇÃO (js_core.html)
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. ESTADO GLOBAL DA APLICAÇÃO E VARIÁVEIS BASE
+   -------------------------------------------------------------------------- */
+let pdfState  = [];
+let sourcePdfs = {};
+let appMode   = 'chat'; 
+let lastSelectedIndex = -1;
+let pdfjsLib = null; 
+let pdfStudioJaInicializado = false; 
+
+// Variáveis para Gestão de Histórico (Undo/Redo) e OCR
+let cutPoints = new Set(); 
+let undoStack = [];
+let redoStack = [];
+const MAX_HISTORY = 20;
+let ocrWordCache = {}; 
+
+/* --------------------------------------------------------------------------
+   2. MOTOR DE HISTÓRICO (UNDO / REDO)
+   -------------------------------------------------------------------------- */
+function saveState() {
+  const stateSnapshot = JSON.parse(JSON.stringify(pdfState));
+  undoStack.push({ pdfState: stateSnapshot, cutPoints: new Set(cutPoints) });
+  if (undoStack.length > MAX_HISTORY) undoStack.shift();
+  redoStack = [];
+}
+
+window.undo = function() {
+  if (undoStack.length === 0) return;
+  redoStack.push({ pdfState: JSON.parse(JSON.stringify(pdfState)), cutPoints: new Set(cutPoints) });
+  
+  const previous = undoStack.pop();
+  pdfState = previous.pdfState;
+  cutPoints = previous.cutPoints;
+  
+  if (typeof renderPdfGrid === 'function') renderPdfGrid();
+  if (typeof showToast === "function") showToast("Ação desfeita", "info");
+};
+
+window.redo = function() {
+  if (redoStack.length === 0) return;
+  undoStack.push({ pdfState: JSON.parse(JSON.stringify(pdfState)), cutPoints: new Set(cutPoints) });
+  
+  const next = redoStack.pop();
+  pdfState = next.pdfState;
+  cutPoints = next.cutPoints;
+  
+  if (typeof renderPdfGrid === 'function') renderPdfGrid();
+  if (typeof showToast === "function") showToast("Ação refeita", "info");
+};
+
+// Atalhos Globais de Teclado para Undo/Redo
+document.addEventListener('keydown', function(e) {
+  if (e.ctrlKey || e.metaKey) {
+    if (e.key === 'z' || e.key === 'Z') {
+      if (e.shiftKey) window.redo();
+      else window.undo();
+      e.preventDefault();
+    } else if (e.key === 'y' || e.key === 'Y') {
+      window.redo();
+      e.preventDefault();
+    }
+  }
+});
+
+/* --------------------------------------------------------------------------
+   3. AUTENTICAÇÃO E ROTEAMENTO (SPA)
+   -------------------------------------------------------------------------- */
+window.fazerLoginReal = function(event) {
+  event.preventDefault();
+  const email = document.getElementById('login-email').value;
+  const senha = document.getElementById('login-senha').value;
+  const btn = document.getElementById('btn-login-submit');
+  
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span> Autenticando...';
+
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      btn.disabled = false;
+      btn.innerHTML = 'Entrar na Estação';
+      
+      if (resp.success) {
+        // Persistência local do Login
+        localStorage.setItem('estacao_logada', 'true');
+        localStorage.setItem('usuario_nome', resp.nome);
+        
+        // 👉 Guarda o email para usar na Base de Dados (Jornadas e Gamificação)
+        localStorage.setItem('usuario_email', document.getElementById('login-email').value);
+        
+        // Transição visual do Login para o App
+        document.getElementById('login-view').style.display = 'none';
+        document.getElementById('app-layout').style.display = 'flex';
+        
+        // Atualiza os nomes na interface
+        const saudo = document.getElementById('dash-greeting');
+        if (saudo) saudo.innerText = 'Olá, ' + resp.nome + '! 👋';
+        
+        const menuName = document.getElementById('user-menu-name');
+        if (menuName) menuName.innerText = resp.nome;
+        
+        mostrarView('dashboard-view');
+      } else {
+        if (typeof showToast === "function") showToast(resp.message, "error");
+        else alert(resp.message);
+      }
+    })
+    .withFailureHandler(function(err) {
+      btn.disabled = false;
+      btn.innerHTML = 'Entrar na Estação';
+      console.error(err);
+      if (typeof showToast === "function") showToast('Erro ao conectar com o servidor.', "error");
+      else alert('Erro ao conectar com o servidor.');
+    })
+    .validarLoginDB(email, senha);
+};
+
+function fazerLogout() {
+  if (confirm("Deseja realmente sair da Estação de Estudos?")) {
+    localStorage.removeItem('estacao_logada');
+    localStorage.removeItem('usuario_nome');
+    localStorage.removeItem('usuario_email'); // Limpa também o e-mail na saída
+    location.reload(); 
+  }
+}
+
+/**
+ * Alternador Universal de Vistas (Roteador SPA)
+ */
+function mostrarView(idView) {
+  const views = [
+    'dashboard-view', 'pdf-studio-view', 'resumos-view', 
+    'quiz-view', 'mapas-view', 'cartoes-view', 
+    'agenda-view', 'tecnicas-view', 'jornadas-view' // Atualizado com a view de Jornadas
+  ];
+
+  // Esconde todas as vistas
+  views.forEach(v => {
+    const el = document.getElementById(v);
+    if (el) el.style.display = 'none';
+  });
+
+  // Mostra a selecionada
+  const target = document.getElementById(idView);
+  if (target) target.style.display = 'block';
+  
+  // Atualiza o estado ativo no menu lateral
+  document.querySelectorAll('.sidebar-nav .nav-item').forEach(item => {
+    item.classList.remove('active');
+    item.style.background = ''; // Limpa estilos inline herdados
+    
+    // Marca como ativo se o onclick tiver o id da view
+    if (item.getAttribute('onclick') && item.getAttribute('onclick').includes(idView)) {
+      item.classList.add('active');
+    }
+  });
+
+  // UX: Pausa a leitura em voz alta se o utilizador sair da mesa
+  if (idView !== 'pdf-studio-view' && window.LeitorTTS && typeof window.LeitorTTS.parar === 'function') {
+    if (!window.LeitorTTS.isPaused) {
+      window.LeitorTTS.parar();
+    }
+  }
+}
+
+/* --------------------------------------------------------------------------
+   4. PREFERÊNCIAS DO UTILIZADOR (Modo Escuro e Animações)
+   -------------------------------------------------------------------------- */
+function inicializarPreferencias() {
+  const themeSwitch = document.getElementById('themeSwitch');
+  const animSwitch = document.getElementById('animSwitch');
+
+  // Modo Noturno (Dark Mode)
+  if (themeSwitch) {
+    const isDark = localStorage.getItem('theme_escuro') === 'true';
+    themeSwitch.checked = isDark;
+    if (isDark) document.documentElement.setAttribute('data-theme', 'dark');
+
+    themeSwitch.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        localStorage.setItem('theme_escuro', 'true');
+      } else {
+        document.documentElement.removeAttribute('data-theme');
+        localStorage.setItem('theme_escuro', 'false');
+      }
+    });
+  }
+
+  // Animações de Interface
+  if (animSwitch) {
+    const reduceAnim = localStorage.getItem('reduzir_animacoes') === 'true';
+    animSwitch.checked = !reduceAnim;
+    if (reduceAnim) document.body.style.setProperty('--transition-smooth', '0s');
+
+    animSwitch.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        document.body.style.removeProperty('--transition-smooth');
+        localStorage.setItem('reduzir_animacoes', 'false');
+      } else {
+        document.body.style.setProperty('--transition-smooth', '0s');
+        localStorage.setItem('reduzir_animacoes', 'true');
+      }
+    });
+  }
+}
+
+/* --------------------------------------------------------------------------
+   5. INICIALIZADOR PRINCIPAL DO ESTÚDIO
+   -------------------------------------------------------------------------- */
+window.PDF_STUDIO_INIT = function() {
+  if (window.pdfStudioJaInicializado) return;
+
+  pdfjsLib = window['pdfjs-dist/build/pdf'];
+  if (pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+  } else {
+    console.error("ERRO CRÍTICO: Motor de leitura de documentos não carregado.");
+    return; 
+  }
+   
+  // Chamadas seguras às funções de UI (que estarão noutro ficheiro)
+  if (typeof iniciarLupaDoPdf === 'function') iniciarLupaDoPdf();
+  if (typeof habilitarDropZonePdf === 'function') habilitarDropZonePdf();
+  if (typeof initLassoSelection === 'function') initLassoSelection();
+  if (typeof inicializarControleDeZoom === 'function') inicializarControleDeZoom();
+  
+  inicializarPreferencias(); // Carrega temas e animações
+   
+  window.pdfStudioJaInicializado = true;
+};
+
+/* --------------------------------------------------------------------------
+   6. BOOT DO SISTEMA (Carregamento da Página)
+   -------------------------------------------------------------------------- */
+document.addEventListener('DOMContentLoaded', function() {
+    const loader = document.getElementById('init-loader');
+    const loginView = document.getElementById('login-view');
+    const appLayout = document.getElementById('app-layout');
+    
+    // Verifica persistência de login no LocalStorage
+    const isLogged = localStorage.getItem('estacao_logada') === 'true';
+
+    if (isLogged) {
+        if (appLayout) appLayout.style.display = 'flex';
+        if (loginView) loginView.style.display = 'none';
+        
+        // Aplica o nome do utilizador nos vários locais do novo design
+        const nome = localStorage.getItem('usuario_nome') || "Estudante";
+        
+        // 1. Saudação no Dashboard
+        const saudo = document.getElementById('dash-greeting');
+        if (saudo) saudo.innerText = 'Olá, ' + nome + '! 👋';
+        
+        // 2. Menu Dropdown no Cabeçalho
+        const menuName = document.getElementById('user-menu-name');
+        if (menuName) menuName.innerText = nome;
+        
+        // 3. Modal de Configurações (Aba Geral)
+        const configNome = document.getElementById('config-nome');
+        if (configNome) configNome.value = nome;
+
+    } else {
+        // Mostrar vista de login com a centralização flex intacta
+        if (loginView) loginView.style.display = 'flex'; 
+        if (appLayout) appLayout.style.display = 'none';
+    }
+
+    // Esconde o loader inicial suavemente
+    setTimeout(function() {
+        if (loader) loader.style.display = 'none';
+    }, 400); 
+});
+</script>
