@@ -1,3 +1,14 @@
+<!--
+  ============================================================================
+  VERSÃO PÚBLICA / PORTFÓLIO - SANITIZADA
+  ----------------------------------------------------------------------------
+  Este arquivo foi preparado para publicação em GitHub/portfólio.
+  Removidos ou mascarados: URLs de assets proprietários, e-mails reais,
+  IDs internos, referências sensíveis, defaults operacionais e trechos
+  estratégicos que não precisam estar abertos.
+  Substitua os placeholders SEU_* / SUA_* apenas em ambiente privado.
+  ============================================================================
+-->
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -16,7 +27,7 @@
 
   <div id="init-loader" style="position:fixed; top:0; left:0; width:100vw; height:100vh; background:#ffffff; z-index:9999; display:flex; flex-direction:column; align-items:center; justify-content:center;">
     <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status"></div>
-    <p class="mt-3 text-muted">A preparar a estação de estudos...</p>
+    <p class="mt-3 text-muted">Preparando a aplicação...</p>
   </div>
 
   <div id="login-view" class="login-wrapper gating-access-screen gating-pulse-gating-card">
@@ -24,7 +35,7 @@
     <style>
       .gating-access-screen {
         /* Fundo Tático de Alta Resolução */
-        background-image: url("https://i.ibb.co/7JN0g1Nd/fundo.png");
+        background-image: url("SUA_URL_DE_BACKGROUND_AQUI");
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
@@ -64,7 +75,7 @@
             <span class="input-group-text bg-light border-end-0">
               <i class="material-icons text-primary fs-5">email</i>
             </span>
-            <input type="email" id="login-email" class="form-control border-start-0 bg-light" placeholder="estudante@email.com" required>
+            <input type="email" id="login-email" class="form-control border-start-0 bg-light" placeholder="usuario@exemplo.com" required>
           </div>
         </div>
 
@@ -89,7 +100,7 @@
     
     <aside class="app-sidebar" style="overflow-y: auto;">
       <div class="sidebar-brand">
-        <img src="https://i.ibb.co/5WHfDf0R/vaquinha.png" alt="Logo MoogIA" style="width: 40px; height: 40px; margin-right: 10px; object-fit: contain;">
+        <img src="SUA_URL_DE_LOGO_OU_MASCOTE_AQUI" alt="Logo MoogIA" style="width: 40px; height: 40px; margin-right: 10px; object-fit: contain;">
         <span class="fw-bold fs-5">MoogIA</span>
       </div>
       
@@ -149,7 +160,7 @@
         </div>
         
         <div class="gamification-header d-flex align-items-center gap-3 ms-4 me-auto px-3 py-1 bg-light rounded-pill border shadow-sm cursor-pointer" title="A sua evolução atual" onclick="mostrarView('agenda-view')">
-          <img src="https://i.ibb.co/5WHfDf0R/vaquinha.png" id="vaquinha-avatar-header" alt="Mascote" style="width: 28px; height: 28px; object-fit: contain;">
+          <img src="SUA_URL_DE_LOGO_OU_MASCOTE_AQUI" id="vaquinha-avatar-header" alt="Mascote" style="width: 28px; height: 28px; object-fit: contain;">
           <div class="d-flex flex-column" style="width: 140px;">
             <div class="d-flex justify-content-between align-items-center mb-1" style="line-height: 1;">
               <span class="small fw-bold text-dark" style="font-size: 11px;">Nível <span id="global-level-text">1</span></span>
@@ -165,9 +176,9 @@
           
           <div class="moodicas-container" onclick="forcarNovaMooDica()" title="Clique para receber uma dica!">
             <div id="moodicas-balao" class="moodicas-balao">
-              <span id="moodicas-texto">Muuuu! Preparado para estudar?</span>
+              <span id="moodicas-texto">Pronto para estudar?</span>
             </div>
-            <img src="https://i.ibb.co/5WHfDf0R/vaquinha.png" alt="MooDicas" class="moodicas-img" style="width: 45px; height: 45px; object-fit: contain; transform: scaleX(-1);">
+            <img src="SUA_URL_DE_LOGO_OU_MASCOTE_AQUI" alt="MooDicas" class="moodicas-img" style="width: 45px; height: 45px; object-fit: contain; transform: scaleX(-1);">
           </div>
 
           <button class="btn btn-light rounded-circle p-2 shadow-sm border-0 d-flex align-items-center justify-content-center" data-bs-toggle="modal" data-bs-target="#modalConfiguracoes" title="Configurações Gerais">
@@ -433,12 +444,12 @@
             </div>
           <div class="col-md-4">
              <div class="card border-0 shadow-sm rounded-4 p-4 text-center h-100 bg-white" style="border: 2px solid var(--border-color) !important;">
-                <h5 class="fw-bold text-secondary mb-4">A tua Evolução</h5>
-                <img src="https://i.ibb.co/5WHfDf0R/vaquinha.png" id="vaquinha-big-avatar" class="mb-3 mx-auto" style="width: 120px; filter: drop-shadow(0 10px 15px rgba(245,158,11,0.3));">
+                <h5 class="fw-bold text-secondary mb-4">Sua Evolução</h5>
+                <img src="SUA_URL_DE_LOGO_OU_MASCOTE_AQUI" id="vaquinha-big-avatar" class="mb-3 mx-auto" style="width: 120px; filter: drop-shadow(0 10px 15px rgba(245,158,11,0.3));">
                 <h2 class="fw-bold text-dark m-0">Nível <span id="painel-level">1</span></h2>
-                <p class="text-muted small mb-4" id="painel-rank">Vaquinha Estudante</p>
+                <p class="text-muted small mb-4" id="painel-rank">Avatar Estudante</p>
                 <div class="bg-light rounded-3 p-3 text-start">
-                   <div class="d-flex justify-content-between small fw-bold mb-2"><span>Próxima recompensa:</span> <span>Chapéu de Mestre</span></div>
+                   <div class="d-flex justify-content-between small fw-bold mb-2"><span>Próxima recompensa:</span> <span>Próxima recompensa</span></div>
                    <div class="progress" style="height: 10px; border-radius: 10px;"><div class="progress-bar bg-success" id="painel-xp-bar" style="width: 0%;"></div></div>
                 </div>
              </div>
@@ -517,7 +528,7 @@
                 </div>
                 <div class="flex-grow-1" id="perfil-display-mode">
                   <h4 class="fw-bold text-dark m-0 mb-1" id="perfil-nome">Estudante</h4>
-                  <span class="badge bg-light border text-secondary"><i class="material-icons align-middle me-1" style="font-size: 14px;">email</i> <span id="perfil-email">estudante@moogia.com</span></span>
+                  <span class="badge bg-light border text-secondary"><i class="material-icons align-middle me-1" style="font-size: 14px;">email</i> <span id="perfil-email">usuario@exemplo.com</span></span>
                 </div>
                 
                 <div class="flex-grow-1 w-100" id="perfil-edit-mode" style="display: none;">
@@ -535,7 +546,7 @@
                   <span class="small fw-bold text-secondary">Nível de Estudante <span id="perfil-nivel" class="badge bg-primary ms-1">1</span></span>
                   <span class="small fw-bold text-warning" id="perfil-xp-total">0 PR</span>
                 </div>
-                <div class="fw-bold text-dark d-flex align-items-center gap-2"><i class="material-icons text-warning" style="font-size: 20px;">military_tech</i> <span id="perfil-rank">Vaquinha Novata</span></div>
+                <div class="fw-bold text-dark d-flex align-items-center gap-2"><i class="material-icons text-warning" style="font-size: 20px;">military_tech</i> <span id="perfil-rank">Avatar Inicial</span></div>
               </div>
             </div>
           </div>
@@ -598,7 +609,7 @@
   <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
       <h3 class="fw-bold text-dark m-0">Painel do Administrador</h3>
-      <p class="text-muted small m-0">Controle o rebanho e as regras da fazenda.</p>
+      <p class="text-muted small m-0">Controle usuários e regras do sistema.</p>
     </div>
   </div>
 
@@ -670,7 +681,7 @@
             <h5 class="fw-bold text-dark m-0">Mapeamento de Ações & XP (PR)</h5>
             <button class="btn btn-sm btn-outline-primary rounded-pill fw-bold" data-bs-toggle="modal" data-bs-target="#modalAdminAcao">+ Nova Regra de Ação</button>
         </div>
-        <p class="small text-muted mb-4">Mapeie as ações que o sistema dispara (ex: <code>upload_pdf</code>) e defina quantos Pontos de Ruminação (PR) valem e o teto máximo diário.</p>
+        <p class="small text-muted mb-4">Mapeie as ações que o sistema dispara (ex: <code>upload_pdf</code>) e defina quantos Pontos de Experiência (XP) valem e o teto máximo diário.</p>
         <div class="table-responsive">
             <table class="table align-middle m-0">
                 <thead class="bg-light text-secondary small fw-bold">
@@ -736,7 +747,7 @@
               </div>
               <div class="mb-3">
                 <label class="form-label small fw-bold text-secondary">E-mail de Login</label>
-                <input type="email" id="admin-user-email" class="form-control" placeholder="nome@exemplo.com">
+                <input type="email" id="admin-user-email" class="form-control" placeholder="usuario@exemplo.com">
               </div>
               <div class="mb-3">
                 <label class="form-label small fw-bold text-secondary">Palavra-passe / Senha</label>
@@ -1004,12 +1015,12 @@
                     <label class="small fw-bold text-secondary mb-1">URL (YouTube, Artigos, Drive)</label>
                     <div class="input-group mb-2 shadow-sm">
                       <span class="input-group-text bg-light border-end-0"><i class="material-icons text-danger fs-5">link</i></span>
-                      <input type="url" id="jor-upload-url-real" class="form-control bg-light border-start-0 text-truncate" placeholder="https://youtube.com/...">
+                      <input type="url" id="jor-upload-url-real" class="form-control bg-light border-start-0 text-truncate" placeholder="SUA_URL_EXEMPLO_AQUI">
                       <button class="btn btn-primary px-3 fw-bold" onclick="executarAdicionarLinkCeleiro()">Gravar</button>
                     </div>
 
                     <div class="bg-light p-2 rounded-3 border mt-auto text-center">
-                      <small class="text-muted d-block" style="font-size: 11px; line-height: 1.3;"><i class="material-icons text-warning align-middle fs-6">lightbulb</i> Os ficheiros sobem para a pasta <b>MoogIA_Assets</b> e ficam prontos para o motor da IA.</small>
+                      <small class="text-muted d-block" style="font-size: 11px; line-height: 1.3;"><i class="material-icons text-warning align-middle fs-6">lightbulb</i> Os ficheiros sobem para a pasta <b>SUA_PASTA_DE_ASSETS</b> e ficam prontos para o motor da IA.</small>
                     </div>
                   </div>
                 </div>
@@ -1278,15 +1289,15 @@
               <div class="mb-4">
                 <div class="d-flex justify-content-between align-items-end mb-1">
                   <label class="form-label small fw-bold text-secondary m-0">Chave Gemini (Google AI Studio)</label>
-                  <a href="https://aistudio.google.com/app/apikey" target="_blank" class="small text-decoration-none d-flex align-items-center gap-1" title="Abre numa nova aba">
+                  <a href="URL_DA_DOCUMENTACAO_DA_API_AQUI" target="_blank" class="small text-decoration-none d-flex align-items-center gap-1" title="Abre em nova aba">
                     <i class="material-icons" style="font-size: 14px;">open_in_new</i> Obter chave gratuita
                   </a>
                 </div>
                 <div class="input-group shadow-sm">
                   <span class="input-group-text bg-light border-end-0"><i class="material-icons text-muted" style="font-size:18px;">vpn_key</i></span>
-                  <input type="password" class="form-control border-start-0 font-monospace bg-light" id="input-gemini-key-config" placeholder="AIzaSy...">
+                  <input type="password" class="form-control border-start-0 font-monospace bg-light" id="input-gemini-key-config" placeholder="SUA_CHAVE_DE_API_AQUI">
                 </div>
-                <div class="form-text small mt-2">A sua chave é armazenada de forma segura e local no seu próprio navegador.</div>
+                <div class="form-text small mt-2">Em produção, proteja chaves de API em backend/proxy seguro; este campo é apenas demonstrativo.</div>
               </div>
               
               <div class="d-flex gap-2">
