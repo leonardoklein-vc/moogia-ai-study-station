@@ -1,12 +1,17 @@
 <script>
 /* ==========================================================================
    ESTAÇÃO DE ESTUDOS IA - COMUNICAÇÃO API E ACERVO CLOUD (js_ia_api.html)
+   VERSÃO PÚBLICA / SANITIZADA PARA PORTFÓLIO
+
+   AVISO: prompts, endpoints, modelos, regras de geração e conteúdos estratégicos
+   foram substituídos por placeholders. Configure as integrações em ambiente
+   privado usando Script Properties, variáveis de ambiente ou backend seguro.
    ========================================================================== */
 
 window.acervoIA_Cache = [];
 
 window.carregarAcervoGlobal = function() {
-    const email = localStorage.getItem('usuario_email');
+    const email = localStorage.getItem('SUA_CHAVE_USUARIO_EMAIL_AQUI');
     if(!email) return;
 
     google.script.run.withSuccessHandler(resp => {
@@ -18,7 +23,7 @@ window.carregarAcervoGlobal = function() {
             if(typeof window.renderizarMapasSalvos === 'function') window.renderizarMapasSalvos();
             if(typeof window.renderizarCartoesSalvos === 'function') window.renderizarCartoesSalvos();
             
-            // NOVO: Atualiza a Dashboard automaticamente sempre que a Nuvem sincroniza
+            // NOVO: Atualiza a Dashboard automaticamente sempre que a Repositório sincroniza
             if(typeof window.renderizarMateriaisRecentesDashboard === 'function') window.renderizarMateriaisRecentesDashboard();
         }
     }).carregarAcervoIABanco(email);
@@ -30,9 +35,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Captura de Contexto Gamificado (Jornada/Módulo/Matéria)
 function obterContextoEstudoAtual() {
-    let jornada = localStorage.getItem('jornada_ativa_nome') || document.getElementById('titulo-jornada-ativa')?.innerText || 'Estudo Independente';
-    let modulo = localStorage.getItem('modulo_ativo_nome') || 'Módulo Geral';
-    let materia = localStorage.getItem('materia_ativa_nome') || 'Matéria Não Especificada';
+    let jornada = localStorage.getItem('SUA_CHAVE_JORNADA_ATIVA_NOME_AQUI') || document.getElementById('titulo-jornada-ativa')?.innerText || 'CONTEXTO_AQUI';
+    let modulo = localStorage.getItem('SUA_CHAVE_MODULO_ATIVO_NOME_AQUI') || 'MODULO_AQUI';
+    let materia = localStorage.getItem('SUA_CHAVE_MATERIA_ATIVA_NOME_AQUI') || 'MATERIA_AQUI';
     return { jornada, modulo, materia };
 }
 
@@ -81,10 +86,10 @@ async function extrairTextoDasPaginasSelecionadas() {
 
 /* --- MOTORES DE INTELIGÊNCIA ARTIFICIAL (GEMINI API) --- */
 async function executarIA(acao) {
-  const apiKey = localStorage.getItem('gemini_api_key');
+  const apiKey = localStorage.getItem('SUA_CHAVE_API_STORAGE_AQUI');
   
   if (!apiKey) {
-    if (typeof showToast === 'function') showToast("Configure a chave do motor de IA primeiro.", "warning");
+    if (typeof showToast === 'function') showToast("Configure a chave privada do motor de IA primeiro.", "warning");
     const modalEl = document.getElementById('modalConfiguracoes');
     if (modalEl && typeof bootstrap !== 'undefined') {
        const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
@@ -99,76 +104,27 @@ async function executarIA(acao) {
     const rawText = await extrairTextoDasPaginasSelecionadas();
     if (typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal("A processar e fundir conhecimentos na IA...");
 
-    let prompt = "";
-    
-    if (acao === 'summarize') {
-      const sumType = document.getElementById('ia-sum-type') ? document.getElementById('ia-sum-type').value : 'executive';
-      if (sumType === 'bullet') prompt = "Faça um resumo em tópicos (bullet points) dos conceitos principais deste material de estudo.";
-      else if (sumType === 'executive') prompt = "Faça um resumo executivo muito conciso e direto deste material.";
-      else prompt = "Aja como um professor particular experiente. Faça uma explicação didática e detalhada desta matéria focando em preparar o aluno para uma prova. Seja claro e estruturado.";
-    } 
-    else if (acao === 'quiz_generator') {
-      const count = document.getElementById('ia-quiz-count') ? document.getElementById('ia-quiz-count').value : 5;
-      const level = document.getElementById('ia-quiz-level') ? document.getElementById('ia-quiz-level').value : 'médio';
-      
-      const checkedStylesElements = document.querySelectorAll('.quiz-style-check:checked');
-      let selectedStyles = Array.from(checkedStylesElements).map(cb => cb.value);
-      if (selectedStyles.length === 0) selectedStyles = ['mix'];
+    let prompt = "PROMPT AQUI";
 
-      const bankDeModelos = {
-        "1": "1. Julgamento Único (Estilo Cebraspe/Cespe)\nAvaliar ( ) Certo / ( ) Errado.",
-        "2": "2. Múltipla Escolha Direta (Apenas uma correta)\nAlternativas A a E.",
-        "3": "3. Múltipla Escolha de Exceção\nAchar a INCORRETA (Exceto).",
-        "4": "4. Análise de Afirmações\nJulgar (I, II, III) e escolher a combinação.",
-        "5": "5. Sequência Lógica\nAvaliar (V) ou (F) e assinalar a sequência.",
-        "8": "8. Asserção e Razão (Enade)\nAvaliar sentenças conectadas por PORQUE.",
-        "9": "9. Somatória (Estilo UFPR/UFSC)\nGabarito é a soma."
-      };
+    /*
+      PROMPTS PRIVADOS REMOVIDOS PARA PUBLICAÇÃO.
+      Configure os prompts reais em arquivo privado, Script Properties ou backend seguro.
+      Exemplo de roteamento público preservado apenas para demonstrar arquitetura.
+    */
+    const PUBLIC_PROMPT_PLACEHOLDERS = {
+      summarize: "PROMPT AQUI",
+      quiz_generator: "PROMPT AQUI",
+      mindmap: "PROMPT AQUI",
+      flashcards: "PROMPT AQUI"
+    };
 
-      let regrasModelo = selectedStyles.includes('mix') 
-        ? "Varie os seguintes modelos:\n" + Object.values(bankDeModelos).join("\n") 
-        : "Siga estritamente:\n" + selectedStyles.map(id => bankDeModelos[id]).join("\n");
+    prompt = PUBLIC_PROMPT_PLACEHOLDERS[acao] || "PROMPT AQUI";
 
-      prompt = `Atue como um examinador de bancas. Crie ${count} questões de nível: ${level.toUpperCase()}.
-ARQUITETURA(S) DA QUESTÃO:
-${regrasModelo}
-
-RETORNO OBRIGATÓRIO (CRÍTICO): Retorne ESTRITAMENTE um JSON:
-{
-  "titulo": "Simulado Extraído",
-  "questoes": [
-    {
-      "enunciado": "...",
-      "opcoes": ["Opção A", "Opção B", "Opção C", "Opção D", "Opção E"],
-      "indice_correto": 1, 
-      "explicacao": "..."
-    }
-  ]
-}`;
-    }
-    else if (acao === 'mindmap') {
-      const level = document.getElementById('ia-mindmap-level') ? document.getElementById('ia-mindmap-level').value : 'detalhado';
-      const layout = document.getElementById('ia-mindmap-layout') ? document.getElementById('ia-mindmap-layout').value : 'TD';
-      // CORREÇÃO: Pedimos explicitamente o bloco markdown
-      prompt = "Crie um diagrama Mermaid baseado no documento. Nível: " + level.toUpperCase() + ".\n" +
-               "REGRAS: 1. Use 'graph " + layout + "'. 2. Texto dos nós em aspas duplas (Ex: id1[\"Texto\"]). Retorne o código ESTRITAMENTE dentro de um bloco markdown ```mermaid ... ```.";
-    }
-    else if (acao === 'flashcards') {
-      const count = document.getElementById('ia-cards-count') ? document.getElementById('ia-cards-count').value : 10;
-      const level = document.getElementById('ia-cards-level') ? document.getElementById('ia-cards-level').value : 'médio';
-      prompt = `Atue como um especialista em neuroaprendizagem. Crie ${count} flashcards (Cartões de Memorização) com profundidade: ${level.toUpperCase()}.
-Eles devem ser baseados EXCLUSIVAMENTE no documento fornecido.
-A "frente" deve ter uma pergunta direta, conceito ou lacuna.
-O "verso" deve ter a resposta exata e uma micro-explicação (se necessário).
-RETORNO OBRIGATÓRIO (JSON PURO, SEM MARKDOWNS): 
-[ { "frente": "Pergunta?", "verso": "Resposta." } ]`;
-    }
-
-    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=" + apiKey, {
+    const response = await fetch("SUA_URL_DE_API_AQUI", {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt + "\n\nMATERIAL DE ESTUDO:\n" + rawText }] }],
+        contents: [{ parts: [{ text: prompt + "\n\nCONTEUDO_BASE_AQUI:\n" + rawText }] }],
         generationConfig: { temperature: 0.2 }
       })
     });
@@ -188,18 +144,18 @@ RETORNO OBRIGATÓRIO (JSON PURO, SEM MARKDOWNS):
         
         // CORREÇÃO: Carimba o contexto imediatamente na criação do objeto!
         const baralho = { 
-            titulo: 'Baralho de Memorização', 
+            titulo: 'TÍTULO_AQUI', 
             cartoes: cardsData,
             contexto: obterContextoEstudoAtual() 
         };
         
-        if (typeof window.abrirModalFlashcardsInterativo === 'function') window.abrirModalFlashcardsInterativo(baralho);
+        if (typeof window.abrirModalTIPO_AQUIInterativo === 'function') window.abrirModalTIPO_AQUIInterativo(baralho);
         if (typeof dispararAcaoGamificacao === 'function') dispararAcaoGamificacao('gerar_flashcards');
     } else {
-        let modalTitle = acao === 'summarize' ? 'Resumo da Matéria' : 'Mapa Mental Visual';
+        let modalTitle = acao === 'summarize' ? 'TÍTULO_AQUI' : 'TÍTULO_AQUI';
         let conteudoRender = finalContent;
         
-        // BLINDAGEM: Se for Mapa Mental e a IA esquecer as crases do markdown, nós injetamos!
+        // BLINDAGEM: Se for TIPO_AQUI e a IA esquecer as crases do markdown, nós injetamos!
         if (acao === 'mindmap' && !conteudoRender.includes('```mermaid')) {
             conteudoRender = "```mermaid\n" + conteudoRender.replace(/```/g, '').trim() + "\n```";
         }
@@ -229,13 +185,13 @@ window.resultadoIAAtual = null;
 
 window.salvarResultadoGenericoNoBanco = function() {
     if (!window.resultadoIAAtual || window.resultadoIAAtual.idCloud) return; 
-    const email = localStorage.getItem('usuario_email');
+    const email = localStorage.getItem('SUA_CHAVE_USUARIO_EMAIL_AQUI');
     if (!email) { alert("Faz o login para usar o acervo cloud."); return; }
 
     const id = 'mat-' + Date.now();
     window.resultadoIAAtual.contexto = obterContextoEstudoAtual(); 
 
-    if(typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal("A enviar para a Nuvem...");
+    if(typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal("A enviar para a Repositório...");
 
     google.script.run.withSuccessHandler(resp => {
         if(typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
@@ -246,14 +202,14 @@ window.salvarResultadoGenericoNoBanco = function() {
             if(typeof showToast === 'function') showToast("Material salvo com sucesso no seu Acervo!", "success");
             window.carregarAcervoGlobal(); 
         } else {
-            alert("Erro da Nuvem: " + resp.error);
+            alert("Erro da Repositório: " + resp.error);
         }
     }).salvarMaterialIABanco(email, id, window.resultadoIAAtual.tipo, window.resultadoIAAtual.titulo, window.resultadoIAAtual);
 };
 
 window.salvarQuizNoBanco = function(isUpdate = false) {
     if (!window.quizDataAtual) return;
-    const email = localStorage.getItem('usuario_email');
+    const email = localStorage.getItem('SUA_CHAVE_USUARIO_EMAIL_AQUI');
     if (!email) { alert("Faz o login para usar o acervo cloud."); return; }
 
     const id = window.quizDataAtual.idCloud || ('quiz-' + Date.now());
@@ -271,12 +227,12 @@ window.salvarQuizNoBanco = function(isUpdate = false) {
                     if (modalQuiz) modalQuiz.remove(); 
                     if(typeof showToast === 'function') showToast("Simulado guardado no seu banco da nuvem!", "success");
                 } else {
-                    if(typeof showToast === 'function') showToast("Histórico de tentativas atualizado na Nuvem!", "success");
+                    if(typeof showToast === 'function') showToast("Histórico de tentativas atualizado na Repositório!", "success");
                 }
                 if(typeof dispararAcaoGamificacao === 'function' && !isUpdate) dispararAcaoGamificacao('salvar_quiz_gerado');
                 window.carregarAcervoGlobal();
             } else {
-                alert("Erro da Nuvem: " + resp.error);
+                alert("Erro da Repositório: " + resp.error);
             }
         }).salvarMaterialIABanco(email, id, 'quiz_generator', window.quizDataAtual.titulo, window.quizDataAtual);
     };
@@ -294,13 +250,13 @@ window.deletarItemAcervo = function(idItem) {
         "Atenção! Tem a certeza de que deseja apagar este material da nuvem permanentemente?", 
         "Sim, apagar", 
         () => {
-            const email = localStorage.getItem('usuario_email');
+            const email = localStorage.getItem('SUA_CHAVE_USUARIO_EMAIL_AQUI');
             if(typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal("A apagar ficheiro...");
             
             google.script.run.withSuccessHandler(resp => {
                 if(typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
                 if(resp.success) {
-                    if(typeof showToast === 'function') showToast("Item apagado da Nuvem.", "info");
+                    if(typeof showToast === 'function') showToast("Item apagado da Repositório.", "info");
                     window.carregarAcervoGlobal();
                 } else {
                     if (typeof showToast === 'function') showToast("Erro: " + resp.error, "error");
@@ -319,7 +275,7 @@ window.AcervoUI = {
 
     init: function(tipo, containerId, badgeLabel, iconName, acaoClickHtml) {
         if (!this.state[tipo]) {
-            const savedView = localStorage.getItem('acervo_view_pref') || 'grid';
+            const savedView = localStorage.getItem('SUA_CHAVE_ACERVO_VIEW_PREF_AQUI') || 'grid';
             this.state[tipo] = { view: savedView, page: 1, perPage: 6, search: '', sort: 'date_desc', selected: [] };
         }
         this.render(tipo, containerId, badgeLabel, iconName, acaoClickHtml);
@@ -403,7 +359,7 @@ window.AcervoUI = {
         if (st.view === 'grid') {
             html += `<div class="row g-4 mb-4">`;
             paginatedItems.forEach(item => {
-                const ctx = item.dados.contexto || { jornada: 'Estudo Livre', materia: '-' };
+                const ctx = item.dados.contexto || { jornada: 'CONTEXTO_AQUI', materia: '-' };
                 const isSelected = st.selected.includes(item.id);
                 html += `
                 <div class="col-md-6 col-lg-4">
@@ -458,7 +414,7 @@ window.AcervoUI = {
                         <tbody>
             `;
             paginatedItems.forEach(item => {
-                const ctx = item.dados.contexto || { jornada: 'Estudo Livre', materia: '-' };
+                const ctx = item.dados.contexto || { jornada: 'CONTEXTO_AQUI', materia: '-' };
                 const isSelected = st.selected.includes(item.id);
                 html += `
                             <tr class="${isSelected ? 'bg-primary-subtle' : ''}">
@@ -518,7 +474,7 @@ window.AcervoUI = {
     updateSort: function(t, c, b, i, a, val) { this.state[t].sort = val; this.render(t, c, b, i, a); },
     updateView: function(t, c, b, i, a, val) { 
         this.state[t].view = val; 
-        localStorage.setItem('acervo_view_pref', val);
+        localStorage.setItem('SUA_CHAVE_ACERVO_VIEW_PREF_AQUI', val);
         this.render(t, c, b, i, a); 
     },
     setPage: function(t, c, b, i, a, val) { this.state[t].page = val; this.render(t, c, b, i, a); },
@@ -553,7 +509,7 @@ window.AcervoUI = {
             `Tem certeza de que deseja excluir permanentemente os ${idsToDelete.length} itens selecionados?`, 
             "Excluir Todos", 
             () => {
-                const email = localStorage.getItem('usuario_email');
+                const email = localStorage.getItem('SUA_CHAVE_USUARIO_EMAIL_AQUI');
                 if(typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal("A excluir itens em massa...");
 
                 let processados = 0;
@@ -575,10 +531,10 @@ window.AcervoUI = {
 
 // --- WRAPPERS DE RENDERIZAÇÃO E ABERTURA SEGURA ---
 
-window.renderizarQuizzesSalvos = function() { AcervoUI.init('quiz_generator', 'grid-questionarios', 'Simulado IA', 'school', 'window.abrirQuizDoAcervo'); };
-window.renderizarResumosSalvos = function() { AcervoUI.init('summarize', 'grid-resumos', 'Resumo IA', 'auto_awesome', 'window.abrirResumoDoAcervo'); };
-window.renderizarMapasSalvos = function() { AcervoUI.init('mindmap', 'grid-mapas', 'Mapa Mental', 'account_tree', 'window.abrirMapaDoAcervo'); };
-window.renderizarCartoesSalvos = function() { AcervoUI.init('flashcards', 'grid-cartoes', 'Flashcards', 'style', 'window.abrirCartoesDoAcervo'); };
+window.renderizarQuizzesSalvos = function() { AcervoUI.init('quiz_generator', 'grid-questionarios', 'TIPO_AQUI', 'school', 'window.abrirQuizDoAcervo'); };
+window.renderizarResumosSalvos = function() { AcervoUI.init('summarize', 'grid-resumos', 'TIPO_AQUI', 'auto_awesome', 'window.abrirResumoDoAcervo'); };
+window.renderizarMapasSalvos = function() { AcervoUI.init('mindmap', 'grid-mapas', 'TIPO_AQUI', 'account_tree', 'window.abrirMapaDoAcervo'); };
+window.renderizarCartoesSalvos = function() { AcervoUI.init('flashcards', 'grid-cartoes', 'TIPO_AQUI', 'style', 'window.abrirCartoesDoAcervo'); };
 
 window.abrirQuizDoAcervo = function(idCloud) {
     const item = window.acervoIA_Cache.find(i => i.id === idCloud);
@@ -611,12 +567,12 @@ window.abrirCartoesDoAcervo = function(idCloud) {
                 titulo: item.titulo || "Baralho",
                 cartoes: item.dados,
                 estilos: { tema: 'tema-classic', fonte: 'font-sans', tamanho: 1.25 },
-                contexto: item.contexto || { jornada: 'Estudo Independente', materia: '-' }
+                contexto: item.contexto || { jornada: 'CONTEXTO_AQUI', materia: '-' }
             };
         }
         
         // Abre o modal passando o objeto completo e o idCloud mapeado corretamente
-        window.abrirModalFlashcardsInterativo(baralho, idCloud);
+        window.abrirModalTIPO_AQUIInterativo(baralho, idCloud);
     }
 };
 
@@ -628,7 +584,7 @@ window.renderizarMateriaisRecentesDashboard = function() {
     if (!window.acervoIA_Cache || window.acervoIA_Cache.length === 0) {
         grid.innerHTML = `
             <div class="col-12 text-center py-4 text-muted border rounded-4 bg-white shadow-sm" style="border-style: dashed !important;">
-              <p class="mb-0 small"><i class="material-icons align-middle me-1">history</i> Nenhum material na sua Nuvem ainda. Gere resumos e simulados!</p>
+              <p class="mb-0 small"><i class="material-icons align-middle me-1">history</i> Nenhum material na sua Repositório ainda. Gere resumos e simulados!</p>
             </div>`;
         return;
     }
@@ -648,12 +604,12 @@ window.renderizarMateriaisRecentesDashboard = function() {
         } else if (item.tipo === 'summarize') {
             icone = 'auto_awesome'; corBadge = 'primary'; funcAbrir = 'window.abrirResumoDoAcervo'; labelTipo = 'Resumo';
         } else if (item.tipo === 'mindmap') {
-            icone = 'account_tree'; corBadge = 'danger'; funcAbrir = 'window.abrirMapaDoAcervo'; labelTipo = 'Mapa Mental';
+            icone = 'account_tree'; corBadge = 'danger'; funcAbrir = 'window.abrirMapaDoAcervo'; labelTipo = 'TIPO_AQUI';
         } else if (item.tipo === 'flashcards') {
             icone = 'style'; corBadge = 'warning text-dark'; funcAbrir = 'window.abrirCartoesDoAcervo'; labelTipo = 'Cartões';
         }
 
-        const ctx = item.dados.contexto || { jornada: 'Estudo Livre', materia: '-' };
+        const ctx = item.dados.contexto || { jornada: 'CONTEXTO_AQUI', materia: '-' };
 
         html += `
         <div class="col-md-4">
@@ -896,7 +852,7 @@ window.lerParteQuiz = function(qIndex, parte, btnElement) {
     } else if (parte === 'tudo') {
         textoLeitura = `Questão ${qIndex + 1}. ${q.enunciado}. As alternativas são: `;
         q.opcoes.forEach((op, oIdx) => { textoLeitura += `Alternativa ${String.fromCharCode(65 + oIdx)}: ${op}. `; });
-    } else if (parte === 'explicacao') textoLeitura = `Comentário da Banca: ${q.explicacao}`;
+    } else if (parte === 'explicacao') textoLeitura = `COMENTÁRIO_AQUI: ${q.explicacao}`;
     
     if (window.LeitorTTS) window.LeitorTTS.ler(textoLeitura, btnElement);
 };
@@ -917,7 +873,7 @@ window.abrirModalQuizInterativo = function(quizData) {
     <div style="background:#f8fafc; width:100%; max-width:900px; height:90vh; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.5); display:flex; flex-direction:column; overflow:hidden; position: relative;">
         <div class="d-flex justify-content-between align-items-center p-4 border-bottom bg-white" style="z-index: 10;">
             <div>
-                <span class="badge bg-success mb-2 px-3 py-2 rounded-pill fw-bold shadow-sm"><i class="material-icons fs-6 align-middle me-1">school</i> Simulador Premium</span>
+                <span class="badge bg-success mb-2 px-3 py-2 rounded-pill fw-bold shadow-sm"><i class="material-icons fs-6 align-middle me-1">school</i> Simulador</span>
                 <h3 class="fw-bold m-0" style="color: #1e293b;">${escapeHtml(quizData.titulo)}</h3>
             </div>
             <button class="btn-close fs-5" onclick="document.getElementById('modal-ia-quiz').remove(); if(window.LeitorTTS) window.LeitorTTS.parar();"></button>
@@ -1081,7 +1037,7 @@ window.exportarProvaParaVisualizar = function(tipo) {
     if (!data) return;
 
     const isProf = tipo === 'professor';
-    const subtitulo = isProf ? 'Gabarito Comentado do Professor' : 'Caderno de Questões do Aluno';
+    const subtitulo = isProf ? 'VERSÃO_COM_GABARITO' : 'VERSÃO_SEM_GABARITO';
 
     let htmlContent = `
         <div id="print-content-wrapper" style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #1e293b; background: #ffffff; padding: 30px;">
@@ -1109,7 +1065,7 @@ window.exportarProvaParaVisualizar = function(tipo) {
         if (isProf) {
             htmlContent += `
                 <div style="margin-top: 20px; padding: 15px; background-color: #f1f5f9; border-left: 4px solid #3b82f6; font-size: 14px; color: #334155; border-radius: 4px;">
-                    <b>Comentário da Banca:</b><br>${escapeHtml(q.explicacao)}
+                    <b>COMENTÁRIO_AQUI:</b><br>${escapeHtml(q.explicacao)}
                 </div>`;
         }
         htmlContent += `</div>`;
@@ -1241,8 +1197,8 @@ window.abrirModalEdicaoAcervo = function(idItem) {
     if (!item) return;
     
     const ctx = item.dados.contexto || { jornada: '', materia: '', topico: '' };
-    const jorAtual = ctx.jornada || 'Estudo Independente';
-    const matAtual = ctx.materia || 'Matéria Não Especificada';
+    const jorAtual = ctx.jornada || 'CONTEXTO_AQUI';
+    const matAtual = ctx.materia || 'MATERIA_AQUI';
     const topAtual = ctx.topico || 'Tópico Não Especificado';
     
     let modal = document.getElementById('modal-editar-acervo');
@@ -1266,7 +1222,7 @@ window.abrirModalEdicaoAcervo = function(idItem) {
             <div class="mb-3">
                 <label class="form-label small fw-bold text-secondary">Jornada Vinculada</label>
                 <select id="edit-acervo-jornada-select" class="form-select bg-light mb-2 fw-semibold text-primary" onchange="window.mudarJornadaEdicaoAcervo()">
-                    <option value="Estudo Independente">Estudo Independente (Avulso)</option>
+                    <option value="CONTEXTO_AQUI">CONTEXTO_AQUI (Avulso)</option>
                     <option value="OUTRA" class="text-secondary">➕ Digitar outra jornada livremente...</option>
                 </select>
                 <input type="text" id="edit-acervo-jornada-input" class="form-control bg-light border-primary" style="display:none;" placeholder="Digite o nome da nova jornada...">
@@ -1275,7 +1231,7 @@ window.abrirModalEdicaoAcervo = function(idItem) {
             <div class="mb-3">
                 <label class="form-label small fw-bold text-secondary">Matéria / Disciplina</label>
                 <select id="edit-acervo-materia-select" class="form-select bg-light mb-2 fw-semibold text-primary" onchange="window.mudarMateriaEdicaoAcervo()">
-                    <option value="Matéria Não Especificada">Matéria Não Especificada</option>
+                    <option value="MATERIA_AQUI">MATERIA_AQUI</option>
                     <option value="OUTRA" class="text-secondary">➕ Digitar outra matéria livremente...</option>
                 </select>
                 <input type="text" id="edit-acervo-materia-input" class="form-control bg-light border-primary" style="display:none;" placeholder="Digite o nome da nova matéria...">
@@ -1316,7 +1272,7 @@ window.abrirModalEdicaoAcervo = function(idItem) {
         });
     }
 
-    if (jorEncontrada || jorAtual === 'Estudo Independente') {
+    if (jorEncontrada || jorAtual === 'CONTEXTO_AQUI') {
         selJor.value = jorAtual;
     } else {
         selJor.value = 'OUTRA';
@@ -1348,13 +1304,13 @@ window.mudarJornadaEdicaoAcervo = function(matParaSelecionar = null, topParaSele
     }
 
     selMat.innerHTML = `
-        <option value="Matéria Não Especificada">Matéria Não Especificada</option>
+        <option value="MATERIA_AQUI">MATERIA_AQUI</option>
         <option value="OUTRA" class="text-secondary">➕ Digitar outra matéria livremente...</option>
     `;
 
     let matEncontrada = false;
 
-    if (valJor !== 'OUTRA' && valJor !== 'Estudo Independente') {
+    if (valJor !== 'OUTRA' && valJor !== 'CONTEXTO_AQUI') {
         const journey = (typeof minhasJornadas !== 'undefined') ? minhasJornadas.find(j => j.titulo === valJor) : null;
         if (journey && journey.materias) {
             journey.materias.forEach(m => {
@@ -1373,7 +1329,7 @@ window.mudarJornadaEdicaoAcervo = function(matParaSelecionar = null, topParaSele
     }
 
     if (matParaSelecionar) {
-        if (matEncontrada || matParaSelecionar === 'Matéria Não Especificada') {
+        if (matEncontrada || matParaSelecionar === 'MATERIA_AQUI') {
             selMat.value = matParaSelecionar;
         } else {
             selMat.value = 'OUTRA';
@@ -1381,7 +1337,7 @@ window.mudarJornadaEdicaoAcervo = function(matParaSelecionar = null, topParaSele
             inpMat.style.display = 'block';
         }
     } else {
-        selMat.value = 'Matéria Não Especificada';
+        selMat.value = 'MATERIA_AQUI';
         inpMat.style.display = 'none';
     }
 
@@ -1415,7 +1371,7 @@ window.mudarMateriaEdicaoAcervo = function(topParaSelecionar = null) {
     let topEncontrado = false;
 
     // Filtra os tópicos da matéria selecionada dentro daquela jornada específica
-    if (valJor !== 'OUTRA' && valJor !== 'Estudo Independente' && valMat !== 'OUTRA' && valMat !== 'Matéria Não Especificada') {
+    if (valJor !== 'OUTRA' && valJor !== 'CONTEXTO_AQUI' && valMat !== 'OUTRA' && valMat !== 'MATERIA_AQUI') {
         const journey = (typeof minhasJornadas !== 'undefined') ? minhasJornadas.find(j => j.titulo === valJor) : null;
         if (journey && journey.materias) {
             const subject = journey.materias.find(m => (m.name || m.nome) === valMat);
@@ -1467,12 +1423,12 @@ window.salvarEdicaoAcervo = function(idItem) {
     const selJor = document.getElementById('edit-acervo-jornada-select');
     const inpJor = document.getElementById('edit-acervo-jornada-input');
     let jornada = selJor.value;
-    if (jornada === 'OUTRA') jornada = inpJor.value.trim() || 'Estudo Independente';
+    if (jornada === 'OUTRA') jornada = inpJor.value.trim() || 'CONTEXTO_AQUI';
 
     const selMat = document.getElementById('edit-acervo-materia-select');
     const inpMat = document.getElementById('edit-acervo-materia-input');
     let materia = selMat.value;
-    if (materia === 'OUTRA') materia = inpMat.value.trim() || 'Matéria Não Especificada';
+    if (materia === 'OUTRA') materia = inpMat.value.trim() || 'MATERIA_AQUI';
 
     const selTop = document.getElementById('edit-acervo-topico-select');
     const inpTop = document.getElementById('edit-acervo-topico-input');
@@ -1484,7 +1440,7 @@ window.salvarEdicaoAcervo = function(idItem) {
         return;
     }
 
-    const email = localStorage.getItem('usuario_email');
+    const email = localStorage.getItem('SUA_CHAVE_USUARIO_EMAIL_AQUI');
     if(typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal("Atualizando metadados na nuvem...");
     
     const modalEl = document.getElementById('modal-editar-acervo');
@@ -1510,7 +1466,7 @@ window.deckDataAtual = null;
 window.flashcardIndexAtual = 0;
 window.fcTamanhoAtual = 1.25;
 
-window.abrirModalFlashcardsInterativo = function(deckData, idCloud = null) {
+window.abrirModalTIPO_AQUIInterativo = function(deckData, idCloud = null) {
     window.deckDataAtual = deckData;
     window.deckDataAtual.idCloud = idCloud;
     window.flashcardIndexAtual = 0;
@@ -1537,7 +1493,7 @@ window.abrirModalFlashcardsInterativo = function(deckData, idCloud = null) {
 
     const isSaved = !!idCloud;
     const btnSalvarHtml = isSaved ? '' : `
-        <button id="btn-salvar-flashcards" class="btn btn-warning fw-bold px-4 shadow-sm text-dark d-flex align-items-center gap-2 rounded-pill" onclick="window.salvarFlashcardsNoBanco()">
+        <button id="btn-salvar-flashcards" class="btn btn-warning fw-bold px-4 shadow-sm text-dark d-flex align-items-center gap-2 rounded-pill" onclick="window.salvarTIPO_AQUINoBanco()">
             <i class="material-icons fs-5">save</i> Salvar Baralho
         </button>
     `;
@@ -1706,9 +1662,9 @@ window.navegarFlashcard = function(direcao) {
     window.renderizarFlashcardAtual();
 };
 
-window.salvarFlashcardsNoBanco = function() {
+window.salvarTIPO_AQUINoBanco = function() {
     if (!window.deckDataAtual) return;
-    const email = localStorage.getItem('usuario_email');
+    const email = localStorage.getItem('SUA_CHAVE_USUARIO_EMAIL_AQUI');
     if (!email) { alert("Faça login para salvar."); return; }
 
     // Detecta se já existe uma ID na nuvem para saber se é uma atualização ou inserção nova
@@ -1736,7 +1692,7 @@ window.salvarFlashcardsNoBanco = function() {
                 }
                 window.carregarAcervoGlobal();
             } else {
-                alert("Erro da Nuvem: " + resp.error);
+                alert("Erro da Repositório: " + resp.error);
             }
         }).salvarMaterialIABanco(email, id, 'flashcards', window.deckDataAtual.titulo, window.deckDataAtual);
     };
@@ -1753,7 +1709,7 @@ window.salvarFlashcardsNoBanco = function() {
 
 window.fcSaveTimeout = null;
 window.dispararSalvamentoFantasmaBaralho = function() {
-    const email = localStorage.getItem('usuario_email');
+    const email = localStorage.getItem('SUA_CHAVE_USUARIO_EMAIL_AQUI');
     if (!email || !window.deckDataAtual || !window.deckDataAtual.idCloud) return;
 
     // DEBOUNCE ANTI-TRAVAMENTO: Cancela qualquer requisição de salvamento anterior que ainda esteja na fila
