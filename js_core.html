@@ -1,10 +1,23 @@
 <script>
+/**
+ * ==========================================================================
+ * VERSÃO PÚBLICA / PORTFÓLIO
+ * ==========================================================================
+ * Este arquivo foi sanitizado para publicação no GitHub.
+ * Credenciais, e-mails pessoais, chaves, IDs reais, regras internas e trechos
+ * estratégicos foram removidos, mockados ou substituídos por placeholders.
+ *
+ * NÃO cole credenciais reais neste arquivo público.
+ * Configure dados sensíveis via backend seguro, PropertiesService ou Secrets.
+ * ==========================================================================
+ */
+
 /* ==========================================================================
    ESTAÇÃO DE ESTUDOS IA - CORE E NAVEGAÇÃO (js_core.html)
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
-   0. POLYFILL DE MEMÓRIA SEGURO (Bypass contra o Tracking Prevention)
+   0. POLYFILL DE ARMAZENAMENTO LOCAL - VERSÃO PÚBLICA
    -------------------------------------------------------------------------- */
 const SafeStorage = {
   _memoriaVolatil: {},
@@ -26,14 +39,14 @@ const SafeStorage = {
   }
 };
 
-/* Auxiliar dinâmico para gerir a visibilidade do menu Admin na Interface */
+/* Auxiliar de visibilidade do menu Admin */
 function gerenciarMenuAdminUI() {
   const emailSalvo = (SafeStorage.getItem('usuario_email') || '').toLowerCase().trim();
   const roleSalvo = SafeStorage.getItem('usuario_role') || '';
   
   const btnAdmin = document.getElementById('menu-item-admin');
   
-  if (roleSalvo === 'Admin' || emailSalvo === "leonardo.rocha@gmail.com" || emailSalvo === "lzigue@hcpa.edu.br") {
+  if (roleSalvo === 'Admin' || emailSalvo === "SEU_EMAIL_AQUI" || emailSalvo === "SEU_EMAIL_AQUI") {
     document.body.classList.add('is-admin');
     if (btnAdmin) btnAdmin.style.setProperty('display', 'flex', 'important');
     console.log("👑 Painel Administrativo Ativado.");
@@ -44,7 +57,7 @@ function gerenciarMenuAdminUI() {
 }
 
 /* --------------------------------------------------------------------------
-   1. ESTADO GLOBAL DA APLICAÇÃO E VARIÁVEIS BASE
+   1. ESTADO GLOBAL DA APLICAÇÃO
    -------------------------------------------------------------------------- */
 let pdfState  = [];
 let sourcePdfs = {};
@@ -108,7 +121,7 @@ document.addEventListener('keydown', function(e) {
 });
 
 /* --------------------------------------------------------------------------
-   3. AUTENTICAÇÃO E SESSÃO (MOTOR TÁTICO UNIFICADO)
+   3. AUTENTICAÇÃO E SESSÃO - VERSÃO PÚBLICA
    -------------------------------------------------------------------------- */
 window.realizarLoginTatico = function(event) {
     event.preventDefault();
@@ -123,7 +136,7 @@ window.realizarLoginTatico = function(event) {
     google.script.run
         .withSuccessHandler(function(resp) {
             if (resp.success) {
-                // Persistência segura
+                // Persistência local de sessão
                 SafeStorage.setItem('estacao_logada', 'true');
                 SafeStorage.setItem('usuario_nome', resp.nome);
                 SafeStorage.setItem('usuario_email', resp.email || email); 
@@ -148,13 +161,13 @@ window.realizarLoginTatico = function(event) {
                 // Registra o log de acesso na nuvem
                 google.script.run.registrarAcessoUsuario(resp.email || email);
 
-                // TRATAMENTO ANCORA: Dispara a carga de dados imediatamente para povoar o cache
+                // Carrega dados básicos do usuário
                 window.dispararCargaGeralDadosDoUsuario();
 
-                if (typeof showToast === "function") showToast("Muuuu! Sessão iniciada. Seus PRs estão seguros!", "success");
+                if (typeof showToast === "function") showToast("Sessão iniciada com sucesso.", "success");
                 mostrarView('dashboard-view');
 
-                // Liga o monitor de inatividade
+                // Inicia monitor de inatividade
                 window.iniciarMonitorInatividade();
 
                 btn.disabled = false;
@@ -179,13 +192,13 @@ window.fazerLogoutManual = function() {
     // Modal estilizado de confirmação
     if (typeof window.confirmarAcao === 'function') {
         window.confirmarAcao(
-            "Sair da Estação?", 
-            "Tem certeza de que deseja encerrar a sua sessão de estudos de hoje?", 
+            "Sair da aplicação?", 
+            "Tem certeza de que deseja encerrar a sua sessão?", 
             "Sim, Deslogar", 
             () => { executarLimpezaDeSessao(); }
         );
     } else {
-        if (confirm("Deseja realmente sair da Estação de Estudos?")) {
+        if (confirm("Deseja realmente sair da aplicação?")) {
             executarLimpezaDeSessao();
         }
     }
@@ -205,13 +218,13 @@ function executarLimpezaDeSessao() {
     const campoSenha = document.getElementById('login-senha');
     if (campoSenha) campoSenha.value = '';
 
-    // 5. O SEGREDO (SOFT-RESET): Em vez de dar F5 (que gera a tela branca no Apps Script),
+    // 5. O SEGREDO (Reset visual sem recarregar a página:
     // nós escondemos o aplicativo e revelamos a tela de login instantaneamente!
     const appLayout = document.getElementById('app-layout');
     const loginView = document.getElementById('login-view');
     
     if (appLayout) appLayout.style.display = 'none';
-    if (loginView) loginView.style.display = 'flex'; // Religa o motor do gating e a animação!
+    if (loginView) loginView.style.display = 'flex'; // Reexibe a tela de login.
 
     // 6. Mensagem de despedida
     if (typeof showToast === 'function') showToast("Logout realizado. Até breve!", "info");
@@ -266,7 +279,7 @@ function mostrarView(idView) {
     if (typeof pdfState !== 'undefined' && pdfState && pdfState.length > 0) {
       window.confirmarAcao(
         "Sair da Mesa de Estudos?", 
-        "Muuu! Tem certeza de que deseja sair? Todos os materiais não guardados serão removidos da sua mesa atual.", 
+        "Tem certeza de que deseja sair? Materiais não salvos serão removidos da mesa atual.", 
         "Sim, sair", 
         () => {
           pdfState = [];
@@ -463,10 +476,10 @@ window.executarSalvarUsuarioAdmin = function() {
 window.executarExcluirUsuarioAdmin = function(targetEmail) {
     const adminEmail = SafeStorage.getItem('usuario_email'); 
     if (targetEmail.toLowerCase() === adminEmail.toLowerCase()) {
-        alert("Você não pode remover a sua própria conta.");
+        alert("Operação bloqueada para a própria conta.");
         return;
     }
-    if (!confirm(`Tem certeza de que deseja banir ${targetEmail}?`)) return;
+    if (!confirm(`Tem certeza de que deseja remover ${targetEmail}?`)) return;
     
     google.script.run.withSuccessHandler(resp => {
         if (resp.success) {
@@ -556,7 +569,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         gerenciarMenuAdminUI();
         
-        // TRATAMENTO ÂNCORA: Repovoa o cache caso tenha sido um refresh duro (F5)
+        // Repovoa o cache após recarregamento da página
         window.dispararCargaGeralDadosDoUsuario();
         
         // Garante que o monitor de inatividade ligue caso o usuário dê um F5 na página
@@ -571,9 +584,14 @@ document.addEventListener('DOMContentLoaded', function() {
         if (loader) loader.style.display = 'none';
     }, 400); 
 
-    const modalKeyInput = document.getElementById('input-gemini-key-config');
-    if(modalKeyInput && SafeStorage.getItem('gemini_api_key')) {
-       modalKeyInput.value = SafeStorage.getItem('gemini_api_key');
+    /**
+     * VERSÃO PÚBLICA:
+     * Preenchimento de chave/API removido.
+     * Em produção, use backend seguro/PropertiesService.
+     */
+    const modalKeyInput = document.getElementById('input-api-key-config');
+    if (modalKeyInput) {
+       modalKeyInput.value = "SUA_CHAVE_AQUI";
     }
 
     if (typeof openTool === 'function') {
@@ -590,18 +608,18 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 /**
- * Garante o reabastecimento completo de todos os dados do banco para o app
- * Roda tanto no Login sem F5 quanto no recarregamento da página (F5)
+ * Carrega dados do usuário para a interface
+ * Executa no login e no recarregamento da página
  */
 window.dispararCargaGeralDadosDoUsuario = function() {
-    console.log("🚜 Iniciando reabastecimento tático de dados do usuário...");
+    console.log("🚜 Iniciando carregamento de dados do usuário...");
     
     // 1. Recarrega as Jornadas
     if (typeof carregarJornadasAtivas === 'function') {
         carregarJornadasAtivas();
     }
     
-    // 2. >>> ADICIONE AQUI A SUA FUNÇÃO DO ACERVOIA <<<
+    // 2. SEU_CODIGO_AQUI: carregamento do acervo
     // Se a sua função que puxa os resumos/mapas da planilha para o cache se chamar, 
     // por exemplo, carregarAcervoIA() ou buscarMateriaisNuvem(), ative-a aqui:
     if (typeof carregarAcervo === 'function') carregarAcervo();
