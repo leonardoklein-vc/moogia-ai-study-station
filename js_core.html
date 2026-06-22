@@ -4,6 +4,46 @@
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
+   0. POLYFILL DE MEMÓRIA SEGURO (Bypass contra o Tracking Prevention)
+   -------------------------------------------------------------------------- */
+const SafeStorage = {
+  _memoriaVolatil: {},
+  setItem: function(chave, valor) {
+    this._memoriaVolatil[chave] = String(valor);
+    try { window.localStorage.setItem(chave, valor); } catch(e) {}
+  },
+  getItem: function(chave) {
+    try { return window.localStorage.getItem(chave) || this._memoriaVolatil[chave] || null; } 
+    catch(e) { return this._memoriaVolatil[chave] || null; }
+  },
+  removeItem: function(chave) {
+    delete this._memoriaVolatil[chave];
+    try { window.localStorage.removeItem(chave); } catch(e) {}
+  },
+  clear: function() {
+    this._memoriaVolatil = {};
+    try { window.localStorage.clear(); } catch(e) {}
+  }
+};
+
+/* Auxiliar dinâmico para gerir a visibilidade do menu Admin na Interface */
+function gerenciarMenuAdminUI() {
+  const emailSalvo = (SafeStorage.getItem('usuario_email') || '').toLowerCase().trim();
+  const roleSalvo = SafeStorage.getItem('usuario_role') || '';
+  
+  const btnAdmin = document.getElementById('menu-item-admin');
+  
+  if (roleSalvo === 'Admin' || emailSalvo === "leonardo.rocha@gmail.com" || emailSalvo === "lzigue@hcpa.edu.br") {
+    document.body.classList.add('is-admin');
+    if (btnAdmin) btnAdmin.style.setProperty('display', 'flex', 'important');
+    console.log("👑 Painel Administrativo Ativado.");
+  } else {
+    document.body.classList.remove('is-admin');
+    if (btnAdmin) btnAdmin.style.setProperty('display', 'none', 'important');
+  }
+}
+
+/* --------------------------------------------------------------------------
    1. ESTADO GLOBAL DA APLICAÇÃO E VARIÁVEIS BASE
    -------------------------------------------------------------------------- */
 let pdfState  = [];
@@ -54,7 +94,6 @@ window.redo = function() {
   if (typeof showToast === "function") showToast("Ação refeita", "info");
 };
 
-// Atalhos Globais de Teclado para Undo/Redo
 document.addEventListener('keydown', function(e) {
   if (e.ctrlKey || e.metaKey) {
     if (e.key === 'z' || e.key === 'Z') {
@@ -69,149 +108,226 @@ document.addEventListener('keydown', function(e) {
 });
 
 /* --------------------------------------------------------------------------
-   3. AUTENTICAÇÃO E ROTEAMENTO (SPA)
+   3. AUTENTICAÇÃO E SESSÃO (MOTOR TÁTICO UNIFICADO)
    -------------------------------------------------------------------------- */
-window.fazerLoginReal = function(event) {
-  event.preventDefault();
-  const email = document.getElementById('login-email').value;
-  const senha = document.getElementById('login-senha').value;
-  const btn = document.getElementById('btn-login-submit');
-  
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span> Autenticando...';
+window.realizarLoginTatico = function(event) {
+    event.preventDefault();
+    const email = document.getElementById('login-email').value.trim();
+    const senha = document.getElementById('login-senha').value;
+    const btn = document.getElementById('btn-login-submit');
 
-  google.script.run
-    .withSuccessHandler(function(resp) {
-      btn.disabled = false;
-      btn.innerHTML = 'Entrar na Estação';
-      
-      if (resp.success) {
-        // Persistência local do Login
-        localStorage.setItem('estacao_logada', 'true');
-        localStorage.setItem('usuario_nome', resp.nome);
-        
-        // 👉 Guarda o email para usar na Base de Dados (Jornadas e Gamificação)
-        localStorage.setItem('usuario_email', document.getElementById('login-email').value);
-        
-        // Transição visual do Login para o App
-        document.getElementById('login-view').style.display = 'none';
-        document.getElementById('app-layout').style.display = 'flex';
-        
-        // Atualiza os nomes na interface
-        const saudo = document.getElementById('dash-greeting');
-        if (saudo) saudo.innerText = 'Olá, ' + resp.nome + '! 👋';
-        
-        const menuName = document.getElementById('user-menu-name');
-        if (menuName) menuName.innerText = resp.nome;
-        
-        mostrarView('dashboard-view');
-      } else {
-        if (typeof showToast === "function") showToast(resp.message, "error");
-        else alert(resp.message);
-      }
-    })
-    .withFailureHandler(function(err) {
-      btn.disabled = false;
-      btn.innerHTML = 'Entrar na Estação';
-      console.error(err);
-      if (typeof showToast === "function") showToast('Erro ao conectar com o servidor.', "error");
-      else alert('Erro ao conectar com o servidor.');
-    })
-    .validarLoginDB(email, senha);
+    const textoOriginal = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span> A Ligar...';
+
+    google.script.run
+        .withSuccessHandler(function(resp) {
+            if (resp.success) {
+                // Persistência segura
+                SafeStorage.setItem('estacao_logada', 'true');
+                SafeStorage.setItem('usuario_nome', resp.nome);
+                SafeStorage.setItem('usuario_email', resp.email || email); 
+                SafeStorage.setItem('usuario_role', resp.role || 'Aluno'); 
+                
+                // Transição visual imediata
+                document.getElementById('login-view').style.display = 'none';
+                document.getElementById('app-layout').style.display = 'flex';
+                
+                // Atualiza elementos da interface
+                const saudo = document.getElementById('dash-greeting');
+                if (saudo) saudo.innerHTML = `<span class="texto-gradiente-roxo">Olá, ${resp.nome}!</span> 👋`;
+                
+                const menuName = document.getElementById('user-menu-name');
+                if (menuName) menuName.innerText = resp.nome;
+                
+                const configNome = document.getElementById('config-nome');
+                if (configNome) configNome.value = resp.nome;
+                
+                gerenciarMenuAdminUI();
+
+                // Registra o log de acesso na nuvem
+                google.script.run.registrarAcessoUsuario(resp.email || email);
+
+                // TRATAMENTO ANCORA: Dispara a carga de dados imediatamente para povoar o cache
+                window.dispararCargaGeralDadosDoUsuario();
+
+                if (typeof showToast === "function") showToast("Muuuu! Sessão iniciada. Seus PRs estão seguros!", "success");
+                mostrarView('dashboard-view');
+
+                // Liga o monitor de inatividade
+                window.iniciarMonitorInatividade();
+
+                btn.disabled = false;
+                btn.innerHTML = textoOriginal;
+            } else {
+                btn.disabled = false;
+                btn.innerHTML = textoOriginal;
+                if (typeof showToast === "function") showToast(resp.message || "E-mail ou senha incorretos.", "error");
+                else alert(resp.message || "E-mail ou senha incorretos.");
+            }
+        })
+        .withFailureHandler(function(err) {
+            btn.disabled = false;
+            btn.innerHTML = textoOriginal;
+            if (typeof showToast === "function") showToast('Erro ao conectar com o servidor.', "error");
+            else alert('Erro ao conectar com o servidor.');
+        })
+        .validarLoginDB(email, senha);
 };
 
-function fazerLogout() {
-  if (confirm("Deseja realmente sair da Estação de Estudos?")) {
-    localStorage.removeItem('estacao_logada');
-    localStorage.removeItem('usuario_nome');
-    localStorage.removeItem('usuario_email'); // Limpa também o e-mail na saída
-    location.reload(); 
-  }
+window.fazerLogoutManual = function() {
+    // Modal estilizado de confirmação
+    if (typeof window.confirmarAcao === 'function') {
+        window.confirmarAcao(
+            "Sair da Estação?", 
+            "Tem certeza de que deseja encerrar a sua sessão de estudos de hoje?", 
+            "Sim, Deslogar", 
+            () => { executarLimpezaDeSessao(); }
+        );
+    } else {
+        if (confirm("Deseja realmente sair da Estação de Estudos?")) {
+            executarLimpezaDeSessao();
+        }
+    }
+};
+
+function executarLimpezaDeSessao() {
+    // 1. Desliga o cão de guarda da inatividade
+    clearInterval(window.intervaloInatividade);
+    
+    // 2. Limpa toda a memória local (Anti-tracking blindado)
+    SafeStorage.clear(); 
+    
+    // 3. Reseta variáveis críticas da sessão (Limpa a Mesa de Estudos)
+    if (typeof pdfState !== 'undefined') pdfState = [];
+    
+    // 4. Limpa o campo de senha por segurança (mas pode deixar o e-mail salvo para facilitar a volta)
+    const campoSenha = document.getElementById('login-senha');
+    if (campoSenha) campoSenha.value = '';
+
+    // 5. O SEGREDO (SOFT-RESET): Em vez de dar F5 (que gera a tela branca no Apps Script),
+    // nós escondemos o aplicativo e revelamos a tela de login instantaneamente!
+    const appLayout = document.getElementById('app-layout');
+    const loginView = document.getElementById('login-view');
+    
+    if (appLayout) appLayout.style.display = 'none';
+    if (loginView) loginView.style.display = 'flex'; // Religa o motor do gating e a animação!
+
+    // 6. Mensagem de despedida
+    if (typeof showToast === 'function') showToast("Logout realizado. Até breve!", "info");
 }
 
-/**
- * Alternador Universal de Vistas (Roteador SPA)
- */
+/* --------------------------------------------------------------------------
+   4. ROTEADOR SPA
+   -------------------------------------------------------------------------- */
 function mostrarView(idView) {
   const views = [
     'dashboard-view', 'pdf-studio-view', 'resumos-view', 
     'quiz-view', 'mapas-view', 'cartoes-view', 
-    'agenda-view', 'tecnicas-view', 'jornadas-view' // Atualizado com a view de Jornadas
+    'agenda-view', 'tecnicas-view', 'jornadas-view', 'admin-view',
+    'perfil-view'
   ];
 
-  // Esconde todas as vistas
-  views.forEach(v => {
+  const viewAtual = views.find(v => {
     const el = document.getElementById(v);
-    if (el) el.style.display = 'none';
+    return el && el.style.display === 'block';
   });
 
-  // Mostra a selecionada
-  const target = document.getElementById(idView);
-  if (target) target.style.display = 'block';
-  
-  // Atualiza o estado ativo no menu lateral
-  document.querySelectorAll('.sidebar-nav .nav-item').forEach(item => {
-    item.classList.remove('active');
-    item.style.background = ''; // Limpa estilos inline herdados
+  const processarTrocaDeTela = () => {
+    views.forEach(v => {
+      const el = document.getElementById(v);
+      if (el) el.style.display = 'none';
+    });
+
+    const target = document.getElementById(idView);
+    if (target) target.style.display = 'block';
     
-    // Marca como ativo se o onclick tiver o id da view
-    if (item.getAttribute('onclick') && item.getAttribute('onclick').includes(idView)) {
-      item.classList.add('active');
+    if (idView === 'pdf-studio-view') {
+      if (typeof window.PDF_STUDIO_INIT === 'function') window.PDF_STUDIO_INIT();
+      if (typeof window.renderPdfGrid === 'function') window.renderPdfGrid();
     }
-  });
 
-  // UX: Pausa a leitura em voz alta se o utilizador sair da mesa
-  if (idView !== 'pdf-studio-view' && window.LeitorTTS && typeof window.LeitorTTS.parar === 'function') {
-    if (!window.LeitorTTS.isPaused) {
-      window.LeitorTTS.parar();
+    document.querySelectorAll('.sidebar-nav .nav-item, .sidebar-footer .nav-item').forEach(item => {
+      item.classList.remove('active');
+      item.style.background = ''; 
+      if (item.getAttribute('onclick') && item.getAttribute('onclick').includes(idView)) {
+        item.classList.add('active');
+      }
+    });
+
+    if (idView !== 'pdf-studio-view' && window.LeitorTTS && typeof window.LeitorTTS.parar === 'function') {
+      if (!window.LeitorTTS.isPaused) {
+        window.LeitorTTS.parar();
+      }
+    }
+  };
+
+  if (viewAtual === 'pdf-studio-view' && idView !== 'pdf-studio-view') {
+    if (typeof pdfState !== 'undefined' && pdfState && pdfState.length > 0) {
+      window.confirmarAcao(
+        "Sair da Mesa de Estudos?", 
+        "Muuu! Tem certeza de que deseja sair? Todos os materiais não guardados serão removidos da sua mesa atual.", 
+        "Sim, sair", 
+        () => {
+          pdfState = [];
+          if (typeof renderPdfGrid === 'function') renderPdfGrid();
+          
+          const seletor = document.getElementById('seletor-ferramenta-mesa');
+          if (seletor) seletor.value = "";
+          
+          if (typeof window.ultimaFerramentaMesaValida !== 'undefined') window.ultimaFerramentaMesaValida = "";
+          processarTrocaDeTela();
+        }
+      );
+      return; 
     }
   }
+
+  processarTrocaDeTela();
 }
 
 /* --------------------------------------------------------------------------
-   4. PREFERÊNCIAS DO UTILIZADOR (Modo Escuro e Animações)
+   5. PREFERÊNCIAS DO UTILIZADOR
    -------------------------------------------------------------------------- */
 function inicializarPreferencias() {
   const themeSwitch = document.getElementById('themeSwitch');
   const animSwitch = document.getElementById('animSwitch');
 
-  // Modo Noturno (Dark Mode)
   if (themeSwitch) {
-    const isDark = localStorage.getItem('theme_escuro') === 'true';
+    const isDark = SafeStorage.getItem('theme_escuro') === 'true';
     themeSwitch.checked = isDark;
     if (isDark) document.documentElement.setAttribute('data-theme', 'dark');
 
     themeSwitch.addEventListener('change', (e) => {
       if (e.target.checked) {
         document.documentElement.setAttribute('data-theme', 'dark');
-        localStorage.setItem('theme_escuro', 'true');
+        SafeStorage.setItem('theme_escuro', 'true');
       } else {
         document.documentElement.removeAttribute('data-theme');
-        localStorage.setItem('theme_escuro', 'false');
+        SafeStorage.setItem('theme_escuro', 'false');
       }
     });
   }
 
-  // Animações de Interface
   if (animSwitch) {
-    const reduceAnim = localStorage.getItem('reduzir_animacoes') === 'true';
+    const reduceAnim = SafeStorage.getItem('reduzir_animacoes') === 'true';
     animSwitch.checked = !reduceAnim;
     if (reduceAnim) document.body.style.setProperty('--transition-smooth', '0s');
 
     animSwitch.addEventListener('change', (e) => {
       if (e.target.checked) {
         document.body.style.removeProperty('--transition-smooth');
-        localStorage.setItem('reduzir_animacoes', 'false');
+        SafeStorage.setItem('reduzir_animacoes', 'false');
       } else {
         document.body.style.setProperty('--transition-smooth', '0s');
-        localStorage.setItem('reduzir_animacoes', 'true');
+        SafeStorage.setItem('reduzir_animacoes', 'true');
       }
     });
   }
 }
 
 /* --------------------------------------------------------------------------
-   5. INICIALIZADOR PRINCIPAL DO ESTÚDIO
+   6. INICIALIZADOR PRINCIPAL DO ESTÚDIO
    -------------------------------------------------------------------------- */
 window.PDF_STUDIO_INIT = function() {
   if (window.pdfStudioJaInicializado) return;
@@ -224,15 +340,193 @@ window.PDF_STUDIO_INIT = function() {
     return; 
   }
    
-  // Chamadas seguras às funções de UI (que estarão noutro ficheiro)
   if (typeof iniciarLupaDoPdf === 'function') iniciarLupaDoPdf();
   if (typeof habilitarDropZonePdf === 'function') habilitarDropZonePdf();
   if (typeof initLassoSelection === 'function') initLassoSelection();
   if (typeof inicializarControleDeZoom === 'function') inicializarControleDeZoom();
   
-  inicializarPreferencias(); // Carrega temas e animações
+  inicializarPreferencias(); 
    
   window.pdfStudioJaInicializado = true;
+};
+
+/* ==========================================================================
+   FUNÇÕES DO PAINEL DE ADMINISTRADOR (CRUD)
+   ========================================================================== */
+window.carregarUsuariosTabela = function() {
+    const adminEmail = SafeStorage.getItem('usuario_email') || localStorage.getItem('usuario_email'); 
+
+    const corpoTabela = document.getElementById('tabela-admin-usuarios-corpo');
+    if (!corpoTabela) return;
+
+    corpoTabela.innerHTML = `<tr><td colspan="6" class="text-center text-muted py-5"><div class="spinner-border spinner-border-sm text-primary me-2"></div>A sincronizar dados...</td></tr>`;
+    
+    google.script.run
+        .withSuccessHandler(resp => {
+            if (resp.success) {
+                corpoTabela.innerHTML = resp.usuarios.map(u => {
+                  let dataFormatada = 'Nunca acessou';
+                  let isOnline = false;
+                  
+                  if (u.ultimoAcesso && u.ultimoAcesso !== 'Nunca' && u.ultimoAcesso !== '') {
+                      const dataAcesso = new Date(u.ultimoAcesso);
+                      if (!isNaN(dataAcesso.getTime())) {
+                          dataFormatada = dataAcesso.toLocaleString('pt-BR', {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'});
+                          isOnline = (new Date() - dataAcesso) < (48 * 60 * 60 * 1000); 
+                      }
+                  }
+
+                  const onlineBadge = isOnline 
+                      ? `<span class="position-absolute top-0 start-100 translate-middle p-1 bg-success border border-white rounded-circle shadow-sm" style="width:12px; height:12px;" title="Online/Ativo"></span>` 
+                      : `<span class="position-absolute top-0 start-100 translate-middle p-1 bg-secondary border border-white rounded-circle shadow-sm" style="width:12px; height:12px;" title="Ausente"></span>`;
+                  
+                  const inicial = u.nome ? u.nome.charAt(0).toUpperCase() : '?';
+
+                  return `
+                  <tr>
+                    <td class="ps-4 py-3">
+                      <div class="d-flex align-items-center gap-3">
+                        <div class="bg-primary-subtle text-primary rounded-circle d-flex align-items-center justify-content-center position-relative shadow-sm" style="width:40px; height:40px; font-weight:900; font-size: 1.1rem;">
+                           ${inicial}
+                           ${onlineBadge}
+                        </div>
+                        <div>
+                          <div class="fw-bold text-dark">${escapeHtml(u.nome)}</div>
+                          <div class="small text-muted" style="font-size:11px;">Membro Ativo</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="py-3 text-secondary small">${escapeHtml(u.email)}</td>
+                    <td class="py-3 text-center">
+                       <span class="badge ${u.role === 'Admin' ? 'bg-danger-subtle text-danger' : 'bg-success-subtle text-success'} rounded-pill fw-bold border" style="font-size: 0.75rem;">${u.role}</span>
+                    </td>
+                    <td class="py-3 text-center">
+                      <div class="d-flex justify-content-center gap-2">
+                        <span class="badge bg-light text-secondary border d-flex align-items-center gap-1 px-2 py-1" title="Jornadas"><i class="material-icons" style="font-size:14px;">route</i> ${u.totalJornadas || 0}</span>
+                        <span class="badge bg-light text-secondary border d-flex align-items-center gap-1 px-2 py-1" title="Acervo"><i class="material-icons" style="font-size:14px;">folder_zip</i> ${u.totalMateriais || 0}</span>
+                      </div>
+                    </td>
+                    <td class="py-3 text-muted small">
+                       <span class="d-flex align-items-center gap-1"><i class="material-icons text-secondary" style="font-size:16px;">schedule</i> ${dataFormatada}</span>
+                    </td>
+                    <td class="pe-4 py-3 text-end">
+                      <button class="btn btn-sm btn-light p-1 rounded-circle border text-secondary me-1" onclick="abrirModalFormUsuario('${u.email}', '${u.nome}', '${u.role}')" title="Editar"><i class="material-icons fs-6 align-middle">edit</i></button>
+                      <button class="btn btn-sm btn-light p-1 rounded-circle border text-danger" onclick="executarExcluirUsuarioAdmin('${u.email}')" title="Remover"><i class="material-icons fs-6 align-middle">delete</i></button>
+                    </td>
+                  </tr>`;
+                }).join('');
+            } else {
+                corpoTabela.innerHTML = `<tr><td colspan="6" class="text-center text-danger py-4"><b>Bloqueio:</b> ${resp.error}</td></tr>`;
+            }
+        })
+        .withFailureHandler(err => {
+            corpoTabela.innerHTML = `<tr><td colspan="6" class="text-center text-danger py-4"><b>Erro:</b> ${err.toString()}</td></tr>`;
+        })
+        .listarUsuariosAdmin(adminEmail);
+};
+
+window.abrirModalFormUsuario = function(email = '', nome = '', role = 'Aluno') {
+    document.getElementById('admin-user-email').value = email;
+    document.getElementById('admin-user-email').disabled = email !== ''; 
+    document.getElementById('admin-user-nome').value = nome;
+    document.getElementById('admin-user-senha').value = '';
+    document.getElementById('admin-user-role').value = role;
+    document.getElementById('modalAdminUsuarioTitulo').innerText = email ? "Editar Cadastro" : "Registrar Novo Usuário";
+    new bootstrap.Modal(document.getElementById('modalAdminUsuario')).show();
+};
+
+window.executarSalvarUsuarioAdmin = function() {
+    const adminEmail = SafeStorage.getItem('usuario_email'); 
+    const payload = {
+        email: document.getElementById('admin-user-email').value.trim(),
+        nome: document.getElementById('admin-user-nome').value.trim(),
+        senha: document.getElementById('admin-user-senha').value,
+        role: document.getElementById('admin-user-role').value
+    };
+    
+    if (!payload.email || !payload.nome || (!payload.senha && !document.getElementById('admin-user-email').disabled)) {
+        alert("Preencha todos os campos corretamente.");
+        return;
+    }
+    
+    google.script.run.withSuccessHandler(resp => {
+        if (resp.success) {
+            bootstrap.Modal.getInstance(document.getElementById('modalAdminUsuario')).hide();
+            if(typeof showToast === 'function') showToast(resp.message, "success");
+            window.carregarUsuariosTabela(); 
+        } else {
+            alert("Erro: " + resp.error);
+        }
+    }).salvarUsuarioAdmin(adminEmail, payload);
+};
+
+window.executarExcluirUsuarioAdmin = function(targetEmail) {
+    const adminEmail = SafeStorage.getItem('usuario_email'); 
+    if (targetEmail.toLowerCase() === adminEmail.toLowerCase()) {
+        alert("Você não pode remover a sua própria conta.");
+        return;
+    }
+    if (!confirm(`Tem certeza de que deseja banir ${targetEmail}?`)) return;
+    
+    google.script.run.withSuccessHandler(resp => {
+        if (resp.success) {
+            if(typeof showToast === 'function') showToast(resp.message, "info");
+            window.carregarUsuariosTabela();
+        } else {
+            alert("Erro: " + resp.error);
+        }
+    }).deletarUsuarioAdmin(adminEmail, targetEmail);
+};
+
+/* ==========================================================================
+   MOTOR DE SESSÃO: MONITOR DE INATIVIDADE E LOGOUT AUTOMÁTICO
+   ========================================================================== */
+window.tempoInatividade = 0;
+window.LIMITE_INATIVIDADE_MINUTOS = 30; 
+window.intervaloInatividade = null;
+
+window.resetarInatividade = function() {
+    window.tempoInatividade = 0; 
+};
+
+window.iniciarMonitorInatividade = function() {
+    if (window.intervaloInatividade) clearInterval(window.intervaloInatividade);
+
+    document.addEventListener('mousemove', window.resetarInatividade);
+    document.addEventListener('keypress', window.resetarInatividade);
+    document.addEventListener('click', window.resetarInatividade);
+    document.addEventListener('scroll', window.resetarInatividade);
+
+    window.intervaloInatividade = setInterval(() => {
+        window.tempoInatividade++;
+
+        if (window.tempoInatividade === (window.LIMITE_INATIVIDADE_MINUTOS - 5)) {
+            if (typeof showToast === 'function') {
+                showToast("Aviso: Sua sessão vai expirar em 5 minutos por falta de atividade.", "warning");
+            }
+        }
+
+        if (window.tempoInatividade >= window.LIMITE_INATIVIDADE_MINUTOS) {
+            window.deslogarPorInatividade();
+        }
+    }, 60000); 
+};
+
+window.deslogarPorInatividade = function() {
+    clearInterval(window.intervaloInatividade);
+    SafeStorage.clear();
+    
+    if (typeof window.confirmarAcao === 'function') {
+        window.confirmarAcao(
+            "Sessão Expirada", 
+            "Você ficou inativo por muito tempo. Para proteger seus dados, sua sessão foi encerrada.", 
+            "Fazer Login Novamente", 
+            () => { window.location.reload(); } 
+        );
+    } else {
+        alert("Sessão encerrada por inatividade.");
+        window.location.reload();
+    }
 };
 
 /* --------------------------------------------------------------------------
@@ -243,37 +537,81 @@ document.addEventListener('DOMContentLoaded', function() {
     const loginView = document.getElementById('login-view');
     const appLayout = document.getElementById('app-layout');
     
-    // Verifica persistência de login no LocalStorage
-    const isLogged = localStorage.getItem('estacao_logada') === 'true';
+    const isLogged = SafeStorage.getItem('estacao_logada') === 'true';
 
     if (isLogged) {
         if (appLayout) appLayout.style.display = 'flex';
         if (loginView) loginView.style.display = 'none';
         
-        // Aplica o nome do utilizador nos vários locais do novo design
-        const nome = localStorage.getItem('usuario_nome') || "Estudante";
+        const nome = SafeStorage.getItem('usuario_nome') || "Estudante";
         
-        // 1. Saudação no Dashboard
         const saudo = document.getElementById('dash-greeting');
-        if (saudo) saudo.innerText = 'Olá, ' + nome + '! 👋';
+        if (saudo) saudo.innerHTML = `<span class="texto-gradiente-roxo">Olá, ${nome}!</span> 👋`;
         
-        // 2. Menu Dropdown no Cabeçalho
         const menuName = document.getElementById('user-menu-name');
         if (menuName) menuName.innerText = nome;
         
-        // 3. Modal de Configurações (Aba Geral)
         const configNome = document.getElementById('config-nome');
         if (configNome) configNome.value = nome;
 
+        gerenciarMenuAdminUI();
+        
+        // TRATAMENTO ÂNCORA: Repovoa o cache caso tenha sido um refresh duro (F5)
+        window.dispararCargaGeralDadosDoUsuario();
+        
+        // Garante que o monitor de inatividade ligue caso o usuário dê um F5 na página
+        window.iniciarMonitorInatividade();
+
     } else {
-        // Mostrar vista de login com a centralização flex intacta
         if (loginView) loginView.style.display = 'flex'; 
         if (appLayout) appLayout.style.display = 'none';
     }
 
-    // Esconde o loader inicial suavemente
     setTimeout(function() {
         if (loader) loader.style.display = 'none';
     }, 400); 
+
+    const modalKeyInput = document.getElementById('input-gemini-key-config');
+    if(modalKeyInput && SafeStorage.getItem('gemini_api_key')) {
+       modalKeyInput.value = SafeStorage.getItem('gemini_api_key');
+    }
+
+    if (typeof openTool === 'function') {
+       const originalOpenTool = openTool;
+       window.openTool = function(toolId) {
+           originalOpenTool(toolId);
+           if (typeof window.exibirMooDicaAtual === 'function') window.exibirMooDicaAtual(toolId);
+       };
+    }
+
+    setTimeout(() => {
+        if (typeof window.exibirMooDicaAtual === 'function') window.exibirMooDicaAtual('default');
+    }, 2000);
 });
+
+/**
+ * Garante o reabastecimento completo de todos os dados do banco para o app
+ * Roda tanto no Login sem F5 quanto no recarregamento da página (F5)
+ */
+window.dispararCargaGeralDadosDoUsuario = function() {
+    console.log("🚜 Iniciando reabastecimento tático de dados do usuário...");
+    
+    // 1. Recarrega as Jornadas
+    if (typeof carregarJornadasAtivas === 'function') {
+        carregarJornadasAtivas();
+    }
+    
+    // 2. >>> ADICIONE AQUI A SUA FUNÇÃO DO ACERVOIA <<<
+    // Se a sua função que puxa os resumos/mapas da planilha para o cache se chamar, 
+    // por exemplo, carregarAcervoIA() ou buscarMateriaisNuvem(), ative-a aqui:
+    if (typeof carregarAcervo === 'function') carregarAcervo();
+    if (typeof carregarAcervoIA === 'function') carregarAcervoIA();
+    if (typeof buscarMateriaisSalvos === 'function') buscarMateriaisSalvos();
+    
+    // 3. Atualiza os contadores visuais da tela inicial
+    if (typeof atualizarGamificacaoUI === 'function') {
+        atualizarGamificacaoUI();
+    }
+};
+
 </script>
