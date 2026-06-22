@@ -1,14 +1,15 @@
 <script>
+/* PUBLIC_SAFE_VERSION: credenciais, endpoints e prompts estratégicos foram removidos/mocados para publicação. */
 /* ==========================================================================
    ESTAÇÃO DE ESTUDOS IA - CÉREBRO IA E REGISTO DE FERRAMENTAS (js_ia_core.html)
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
-   1. GESTÃO DA API DO GOOGLE GEMINI
+   1. GESTÃO DA API DO MOTOR DE IA
    -------------------------------------------------------------------------- */
 
-window.removerGeminiKey = function() {
-  localStorage.removeItem('gemini_api_key');
+window.removerMOTOR_IAKey = function() {
+  localStorage.removeItem('SUA_CHAVE_IA_AQUI');
   const inputConfig = document.getElementById('input-gemini-key-config');
   if (inputConfig) inputConfig.value = '';
   
@@ -16,12 +17,12 @@ window.removerGeminiKey = function() {
   if (currentTool) openTool(currentTool); // Recarrega a interface da ferramenta atual
 };
 
-window.salvarGeminiKey = function() {
+window.salvarMOTOR_IAKey = function() {
   const inputConfig = document.getElementById('input-gemini-key-config');
   const key = inputConfig ? inputConfig.value.trim() : '';
   
   if (key) {
-    localStorage.setItem('gemini_api_key', key);
+    localStorage.setItem('SUA_CHAVE_IA_AQUI', key);
     if (typeof showToast === 'function') showToast("Motor de IA configurado! Ferramentas generativas ativadas.", "success");
     
     // Fecha o modal nativo do Bootstrap após guardar
@@ -37,8 +38,8 @@ window.salvarGeminiKey = function() {
 
     if (currentTool) openTool(currentTool);
   } else {
-    if (typeof showToast === 'function') showToast("Por favor, insira uma chave de API válida.", "warning");
-    else alert("Por favor, insira uma chave de API válida.");
+    if (typeof showToast === 'function') showToast("Por favor, insira a credencial do motor de IA.", "warning");
+    else alert("Por favor, insira a credencial do motor de IA.");
   }
 };
 
@@ -47,11 +48,11 @@ window.salvarGeminiKey = function() {
    -------------------------------------------------------------------------- */
 
 function getApiBadgeHtml() {
-  const hasKey = localStorage.getItem('gemini_api_key');
+  const hasKey = localStorage.getItem('SUA_CHAVE_IA_AQUI');
   if (hasKey) {
     return `<span class="badge bg-success-subtle text-success border border-success-subtle shadow-sm px-2 py-1"><i class="material-icons align-middle" style="font-size:12px;">bolt</i> IA Ativa</span>`;
   } else {
-    return `<span class="badge bg-danger-subtle text-danger border border-danger-subtle shadow-sm px-2 py-1" style="cursor: pointer;" onclick="document.querySelector('[data-bs-target=\\'#config-api\\']').click(); new bootstrap.Modal(document.getElementById('modalConfiguracoes')).show();"><i class="material-icons align-middle" style="font-size:12px;">warning</i> Falta Chave API</span>`;
+    return `<span class="badge bg-danger-subtle text-danger border border-danger-subtle shadow-sm px-2 py-1" style="cursor: pointer;" onclick="document.querySelector('[data-bs-target=\\'#config-api\\']').click(); new bootstrap.Modal(document.getElementById('modalConfiguracoes')).show();"><i class="material-icons align-middle" style="font-size:12px;">warning</i> Configuração pendente</span>`;
   }
 }
 
@@ -95,7 +96,7 @@ const ToolRegistry = {
                 </div>
                 <div class="form-check mb-1">
                   <input class="form-check-input quiz-style-check" type="checkbox" value="1" id="style-1" onchange="document.getElementById('style-all').checked = false">
-                  <label class="form-check-label small text-dark" for="style-1">Certo/Errado (Estilo Cespe)</label>
+                  <label class="form-check-label small text-dark" for="style-1">Certo/Errado (Modelo Genérico)</label>
                 </div>
                 <div class="form-check mb-1">
                   <input class="form-check-input quiz-style-check" type="checkbox" value="3" id="style-3" onchange="document.getElementById('style-all').checked = false">
@@ -111,11 +112,11 @@ const ToolRegistry = {
                 </div>
                 <div class="form-check mb-1">
                   <input class="form-check-input quiz-style-check" type="checkbox" value="8" id="style-8" onchange="document.getElementById('style-all').checked = false">
-                  <label class="form-check-label small text-dark" for="style-8">Asserção e Razão (Estilo Enade)</label>
+                  <label class="form-check-label small text-dark" for="style-8">Asserção e Razão (Modelo Genérico)</label>
                 </div>
                 <div class="form-check mb-1">
                   <input class="form-check-input quiz-style-check" type="checkbox" value="9" id="style-9" onchange="document.getElementById('style-all').checked = false">
-                  <label class="form-check-label small text-dark" for="style-9">Somatória (Estilo UFPR/UFSC)</label>
+                  <label class="form-check-label small text-dark" for="style-9">Somatória (Modelo Genérico)</label>
                 </div>
               </div>
             </div>
@@ -279,7 +280,7 @@ window.processarPdfFinal = async function() {
   const btnFinalizar = document.getElementById('btn-finalizar');
 
   if (!acao) {
-    if(typeof showToast === 'function') showToast("Muuu! Selecione uma ferramenta no menu primeiro.", "warning");
+    if(typeof showToast === 'function') showToast("Aviso: Selecione uma ferramenta no menu primeiro.", "warning");
     return;
   }
 
@@ -516,9 +517,9 @@ window.submeterEditalIA = function() {
 };
 
 window.iniciarLeituraDeEdital = async function(file, cargoAlvo, nivelAlvo) {
-  const apiKey = localStorage.getItem('gemini_api_key');
+  const apiKey = localStorage.getItem('SUA_CHAVE_IA_AQUI');
   if (!apiKey) {
-    alert("ERRO: Falta a chave da API do Gemini!\nVá às Configurações (ícone da engrenagem no topo direito) e conecte a sua chave.");
+    alert("ERRO: credencial do motor de IA não configurada.");
     return;
   }
 
@@ -544,32 +545,8 @@ window.iniciarLeituraDeEdital = async function(file, cargoAlvo, nivelAlvo) {
       rawText += textContent.items.map(item => item.str).join(' ') + "\n";
     }
 
-    const prompt = `Atue como um Especialista em Planeamento de Estudos para Concursos Públicos.
-    O candidato deseja organizar os estudos ESPECIFICAMENTE para o cargo/vaga de "${cargoAlvo}" (Escolaridade: ${nivelAlvo}).
-    INSTRUÇÕES DE EXTRAÇÃO ABSOLUTA E CRÍTICA:
-    1. QUADRO DE PROVAS (PESOS REAIS): Localize no documento a tabela ou secção chamada "Estrutura das Provas", "Quadro de Provas" ou "Avaliação".
-    Encontre as matérias exatas para o cargo "${cargoAlvo}" ou para a escolaridade "${nivelAlvo}".
-    Extraia o PESO exato (ou valor em pontos de cada questão) definido nas regras. É PROIBIDO inventar pesos.
-    2. CONTEÚDO PROGRAMÁTICO (TÓPICOS): Localize a secção de Conteúdos Programáticos (geralmente nos anexos finais).
-    3. CRUZAMENTO DE DADOS: 
-       - Para as matérias básicas (como Língua Portuguesa, Legislação, Informática), procure os tópicos que estão agrupados sob a secção de "${nivelAlvo}".
-       - Para a matéria de "Conhecimentos Específicos", localize EXATAMENTE o bloco de texto referente ao cargo "${cargoAlvo}".
-    IGNORE ABSOLUTAMENTE os conhecimentos específicos de outros cargos.
-    4. Quebre o bloco de texto de cada matéria numa lista lógica e fragmentada de tópicos de estudo.
-    RETORNO OBRIGATÓRIO (JSON PURO, SEM MARKDOWNS, SEM TEXTO INTRODUTÓRIO):
-    {
-      "titulo": "${cargoAlvo}",
-      "tipo": "Concurso Público",
-      "nivel": "${nivelAlvo}",
-      "materias": [
-        {
-          "nome": "Nome Exato da Matéria no Quadro de Provas (ex: Conhecimentos Específicos)",
-          "peso_sugerido": 2.5, 
-          "topicos": [ "Tópico 1", "Tópico 2" ]
-        }
-      ]
-    }`;
-    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=" + apiKey, {
+    const prompt = `PROMPT AQUI`;
+    const response = await fetch("SUA_URL_DE_ENDPOINT_IA_AQUI?key=" + apiKey, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -726,28 +703,28 @@ window.salvarNovaJornada = function() {
    MOTOR DE EMPATIA: TRATAMENTO DE ERROS DA IA
    ========================================================================== */
 window.exibirErroAmigavelIA = function(erroOriginal) {
-    let mensagemAmigavel = "Muuuu! 🐮 Eita, o trator deu uma engasgada nas conexões neurais. Ocorreu um erro inesperado. Pode tentar novamente em alguns segundos?";
+    let mensagemAmigavel = "Aviso: 🐮 Eita, o processador deu uma engasgada nas conexões neurais. Ocorreu um erro inesperado. Pode tentar novamente em alguns segundos?";
     let strErro = String(erroOriginal).toLowerCase();
 
     // 1. Erro de Chave API (Falta de configuração ou chave inválida)
     if (strErro.includes("key") || strErro.includes("api") || strErro.includes("auth") || strErro.includes("unauthorized")) {
-        mensagemAmigavel = "Muuuu! 🔑 A chave do celeiro da IA (API Key) parece inválida ou não foi configurada. Verifique o painel de configurações!";
+        mensagemAmigavel = "Aviso: 🔑 A chave do ambiente da IA (API Key) parece inválida ou não foi configurada. Verifique o painel de configurações!";
     } 
     // 2. Erro de Tempo Esgotado (Material muito grande)
     else if (strErro.includes("timeout") || strErro.includes("tempo") || strErro.includes("deadline")) {
-        mensagemAmigavel = "Muuuu! ⏳ O pasto estava muito grande! A leitura demorou demais e a IA precisou descansar. Tente processar um pedaço menor do texto.";
+        mensagemAmigavel = "Aviso: ⏳ O pasto estava muito grande! A leitura demorou demais e a IA precisou descansar. Tente processar um pedaço menor do texto.";
     } 
-    // 3. Erro de Limite de Cota (Rate limit do Google/Gemini)
+    // 3. Erro de Limite de Cota (Rate limit do Google/MOTOR_IA)
     else if (strErro.includes("quota") || strErro.includes("limit") || strErro.includes("429")) {
-        mensagemAmigavel = "Muuuu! 🌾 Esgotamos o capim mágico por agora! A inteligência artificial atingiu o limite de consultas por minuto. Respire fundo e tente em breve.";
+        mensagemAmigavel = "Aviso: 🌾 Esgotamos o cota disponível por agora! A inteligência artificial atingiu o limite de consultas por minuto. Respire fundo e tente em breve.";
     }
     // 4. Erro de Servidor Indisponível (500, 503)
     else if (strErro.includes("500") || strErro.includes("503") || strErro.includes("unavailable")) {
-        mensagemAmigavel = "Muuuu! 🌩️ Uma tempestade passou pelos nossos servidores. A conexão caiu, mas nossa equipe de tratoristas já está verificando. Tente novamente!";
+        mensagemAmigavel = "Aviso: 🌩️ Uma tempestade passou pelos nossos servidores. A conexão caiu, mas nossa equipe de processadoristas já está verificando. Tente novamente!";
     }
     // 5. Erro de Formato ou Texto Incompreensível
     else if (strErro.includes("parse") || strErro.includes("json") || strErro.includes("format")) {
-        mensagemAmigavel = "Muuuu! 🧩 O resultado saiu mastigado demais e não consegui organizar. A IA se confundiu com o formato. Vamos tentar reescrever o pedido?";
+        mensagemAmigavel = "Aviso: 🧩 O resultado saiu mastigado demais e não consegui organizar. A IA se confundiu com o formato. Vamos tentar reescrever o pedido?";
     }
 
     // Dispara visualmente para o usuário usando o Toast ou Alert
