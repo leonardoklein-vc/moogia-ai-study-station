@@ -1,0 +1,627 @@
+<script>
+/* ==========================================================================
+   ESTAÇÃO DE ESTUDOS IA - CÉREBRO IA E REGISTO DE FERRAMENTAS (js_ia_core.html)
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. GESTÃO DA API DO GOOGLE GEMINI
+   -------------------------------------------------------------------------- */
+
+window.removerGeminiKey = function() {
+  localStorage.removeItem('gemini_api_key');
+  const inputConfig = document.getElementById('input-gemini-key-config');
+  if (inputConfig) inputConfig.value = '';
+  
+  if (typeof showToast === 'function') showToast('Motor de IA desconectado com sucesso.', 'info');
+  if (currentTool) openTool(currentTool); // Recarrega a interface da ferramenta atual
+};
+
+window.salvarGeminiKey = function() {
+  const inputConfig = document.getElementById('input-gemini-key-config');
+  const key = inputConfig ? inputConfig.value.trim() : '';
+  
+  if (key) {
+    localStorage.setItem('gemini_api_key', key);
+    if (typeof showToast === 'function') showToast("Motor de IA configurado! Ferramentas generativas ativadas.", "success");
+    
+    // Fecha o modal nativo do Bootstrap após guardar
+    try {
+      const modalEl = document.getElementById('modalConfiguracoes');
+      if (modalEl && typeof bootstrap !== 'undefined') {
+        const bsModal = bootstrap.Modal.getInstance(modalEl);
+        if (bsModal) bsModal.hide();
+      }
+    } catch(e) {
+      console.warn("Aviso ao fechar modal:", e);
+    }
+
+    if (currentTool) openTool(currentTool);
+  } else {
+    if (typeof showToast === 'function') showToast("Por favor, insira uma chave de API válida.", "warning");
+    else alert("Por favor, insira uma chave de API válida.");
+  }
+};
+
+/* --------------------------------------------------------------------------
+   2. REGISTO DAS FERRAMENTAS DE ESTUDO (UI e Configurações)
+   -------------------------------------------------------------------------- */
+
+function getApiBadgeHtml() {
+  const hasKey = localStorage.getItem('gemini_api_key');
+  if (hasKey) {
+    return `<span class="badge bg-success-subtle text-success border border-success-subtle shadow-sm px-2 py-1"><i class="material-icons align-middle" style="font-size:12px;">bolt</i> IA Ativa</span>`;
+  } else {
+    return `<span class="badge bg-danger-subtle text-danger border border-danger-subtle shadow-sm px-2 py-1" style="cursor: pointer;" onclick="document.querySelector('[data-bs-target=\\'#config-api\\']').click(); new bootstrap.Modal(document.getElementById('modalConfiguracoes')).show();"><i class="material-icons align-middle" style="font-size:12px;">warning</i> Falta Chave API</span>`;
+  }
+}
+
+const ToolRegistry = {
+  'quiz_generator': {
+    title: 'Gerar Questões',
+    icon: 'quiz',
+    mode: 'quiz_generator',
+    render: (sub) => {
+      sub.innerHTML = `
+        <div class="d-flex align-items-center gap-3 w-100 flex-wrap">
+          <div class="d-flex align-items-center me-2">${getApiBadgeHtml()}</div>
+          <div>
+            <label class="small fw-bold text-secondary mb-1">Nº Questões</label>
+            <input type="number" id="ia-quiz-count" class="form-control form-control-sm shadow-sm text-center" value="5" min="1" max="50" style="width: 80px;">
+          </div>
+          <div>
+            <label class="small fw-bold text-secondary mb-1">Dificuldade da Prova</label>
+            <select id="ia-quiz-level" class="form-select form-select-sm shadow-sm" style="width: 150px;">
+              <option value="fácil">Revisão Básica</option>
+              <option value="médio" selected>Nível Intermédio</option>
+              <option value="difícil">Avançado</option>
+              <option value="concurso">Nível Concurso</option>
+            </select>
+          </div>
+        </div>
+      `;
+    },
+    init: () => { appMode = 'quiz_generator'; }
+  },
+
+  'summarize': {
+    title: 'Resumir Material',
+    icon: 'auto_awesome',
+    mode: 'summarize',
+    render: (sub) => {
+      sub.innerHTML = `
+        <div class="d-flex align-items-center gap-3 w-100 flex-wrap">
+          <div class="d-flex align-items-center me-2">${getApiBadgeHtml()}</div>
+          <div>
+            <label class="small fw-bold text-secondary mb-1">Estratégia de Resumo</label>
+            <select id="ia-sum-type" class="form-select form-select-sm shadow-sm" style="width: 220px;">
+              <option value="bullet">Tópicos Principais (Bullets)</option>
+              <option value="executive" selected>Resumo Executivo (Geral)</option>
+              <option value="detailed">Explicação Detalhada (Prova)</option>
+            </select>
+          </div>
+        </div>
+      `;
+    },
+    init: () => { appMode = 'summarize'; }
+  },
+
+  'chat': {
+    title: 'Conversar (Copiloto)',
+    icon: 'forum',
+    mode: 'chat',
+    render: (sub) => {
+      sub.innerHTML = `
+        <div class="d-flex align-items-center gap-3 w-100 flex-wrap">
+          <div class="d-flex align-items-center me-2">${getApiBadgeHtml()}</div>
+          <div class="text-secondary small fw-bold">
+            Converse diretamente com os seus materiais de estudo.
+          </div>
+        </div>
+      `;
+    },
+    init: () => { appMode = 'chat'; if (typeof alternarWorkspaceChat === 'function') alternarWorkspaceChat(true); }
+  },
+
+  'mindmap': {
+    title: 'Mapas Mentais',
+    icon: 'account_tree',
+    mode: 'mindmap',
+    render: (sub) => {
+      sub.innerHTML = `
+        <div class="d-flex align-items-center gap-3 w-100 flex-wrap">
+          <div class="d-flex align-items-center me-2">${getApiBadgeHtml()}</div>
+          <div>
+            <label class="small fw-bold text-secondary mb-1">Nível de Extração Visual</label>
+            <select id="ia-mindmap-level" class="form-select form-select-sm shadow-sm" style="width: 160px;">
+              <option value="simples">Estrutura Simples</option>
+              <option value="detalhado" selected>Profundo / Detalhado</option>
+            </select>
+          </div>
+        </div>
+      `;
+    },
+    init: () => { appMode = 'mindmap'; }
+  },
+
+  'flashcards': {
+    title: 'Cartões (Flashcards)',
+    icon: 'style',
+    mode: 'flashcards',
+    render: (sub) => {
+      sub.innerHTML = `
+        <div class="d-flex align-items-center gap-3 w-100 flex-wrap">
+          <div class="d-flex align-items-center me-2">${getApiBadgeHtml()}</div>
+          <div>
+            <label class="small fw-bold text-secondary mb-1">Quantidade de Cartões</label>
+            <input type="number" id="ia-cards-count" class="form-control form-control-sm shadow-sm text-center" value="10" min="1" max="50" style="width: 80px;">
+          </div>
+          <div class="text-secondary small fw-bold mt-3">
+             Gera pares de Pergunta e Resposta para memorização ativa (Anki-style).
+          </div>
+        </div>
+      `;
+    },
+    init: () => { appMode = 'flashcards'; }
+  }
+};
+
+
+/* --------------------------------------------------------------------------
+   3. ORQUESTRADOR CENTRAL (Abertura e Execução de Ferramentas)
+   -------------------------------------------------------------------------- */
+
+let currentTool = null;
+
+window.openTool = function(toolId) {
+  if (toolId !== 'chat' && typeof alternarWorkspaceChat === 'function') {
+    alternarWorkspaceChat(false); 
+  }
+
+  const tool = ToolRegistry[toolId];
+  if (!tool) return;
+
+  currentTool = toolId;
+  appMode = tool.mode;
+  
+  const titleEl = document.getElementById('studio-active-title');
+  const iconEl = document.getElementById('studio-icon-display');
+  if (titleEl) titleEl.innerText = tool.title;
+  if (iconEl) iconEl.innerText = tool.icon;
+
+  const subMenu = document.getElementById('pdf-context-submenu');
+  if (subMenu) {
+    subMenu.innerHTML = '';
+    if (typeof tool.render === 'function') tool.render(subMenu);
+  }
+
+  if (typeof tool.init === 'function') tool.init();
+
+  const previewArea = document.getElementById('pdf-preview-area');
+  if (previewArea) {
+    previewArea.className = previewArea.className.replace(/mode-[^\s]+/g, '').trim();
+    previewArea.classList.add(`mode-${appMode}`, 'shadow-sm');
+  }
+
+  const selector = document.getElementById('seletor-ferramenta-mesa');
+  if (selector && selector.value !== toolId) {
+    selector.value = toolId;
+  }
+};
+
+window.processarPdfFinal = async function() {
+  if (!pdfState || !pdfState.length) {
+    if (typeof showToast === "function") showToast("A mesa de estudos está vazia. Adicione material primeiro.", "warning");
+    return;
+  }
+
+  if (typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal("A preparar o ambiente de estudo...");
+
+  try {
+    switch(currentTool) {
+      case 'ocr':            
+        await executarOCR(); 
+        break;
+      case 'summarize':      
+        if(typeof executarIA === 'function') await executarIA('summarize'); 
+        break;
+      case 'quiz_generator': 
+        if(typeof executarIA === 'function') await executarIA('quiz_generator'); 
+        break;
+      case 'mindmap':        
+        if(typeof executarIA === 'function') await executarIA('mindmap'); 
+        break;
+      case 'chat':           
+        return; 
+      case 'read_pdf':       
+        if(typeof executarLeituraFerramenta === 'function') await executarLeituraFerramenta(); 
+        break;
+      case 'flashcards':     
+        if(typeof executarIA === 'function') await executarIA('flashcards'); 
+        break;
+      default: 
+        throw new Error(`A ferramenta "${currentTool}" não está mapeada para a área de estudos.`);
+    }
+  } catch (err) {
+    console.error("Erro no processamento:", err);
+    if (typeof showToast === "function") showToast(err.message || "Erro ao processar.", "error");
+  } finally {
+    if (typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
+  }
+};
+
+
+/* --------------------------------------------------------------------------
+   4. MOTOR DE EXTRAÇÃO OCR (Tesseract.js + PDF-Lib)
+   -------------------------------------------------------------------------- */
+
+window.executarOCR = async function() {
+  if (typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal("A iniciar extração de texto (OCR)...");
+  try {
+    if (typeof Tesseract === 'undefined') {
+      await new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js';
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
+    }
+
+    const selectedPages = pdfState.filter(p => p.selected);
+    const pagesToProcess = selectedPages.length > 0 ? selectedPages : pdfState;
+    if (pagesToProcess.length === 0) throw new Error("A mesa de estudos está vazia.");
+
+    for (let i = 0; i < pagesToProcess.length; i++) {
+      const page = pagesToProcess[i];
+      if (typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal(`A ler material: página ${i + 1} de ${pagesToProcess.length}...`);
+      
+      const result = await Tesseract.recognize(page.thumbnailBase64, 'por');
+      page.extractedText = result.data.text;
+      
+      ocrWordCache[page.id] = result.data.words.map(w => ({
+          text: w.text,
+          bbox: { x0: w.bbox.x0, y0: w.bbox.y0, x1: w.bbox.x1, y1: w.bbox.y1 }
+      }));
+      
+      const img = new Image();
+      img.src = page.thumbnailBase64;
+      await new Promise(r => img.onload = r);
+      page.ocrCanvasWidth = img.width;
+      page.ocrCanvasHeight = img.height;
+    }
+    
+    if (typeof showToast === 'function') showToast("Texto interpretado! A otimizar material para a IA...", "info");
+    await gerarPdfPesquisavel();
+
+  } catch (error) {
+    if (typeof showToast === 'function') showToast("Erro no OCR: " + error.message, "error");
+  } finally {
+    if (typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
+    if (typeof renderPdfGrid === 'function') renderPdfGrid();
+  }
+};
+
+window.gerarPdfPesquisavel = async function() {
+  const pagesWithOcr = pdfState.filter(p => p.extractedText && p.extractedText.trim().length > 0);
+  if (pagesWithOcr.length === 0) return;
+
+  if (typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal("A gravar matriz de texto no documento...");
+
+  try {
+    const newPdf = await PDFLib.PDFDocument.create();
+    const font = await newPdf.embedFont(PDFLib.StandardFonts.Helvetica);
+
+    const loadedPdfDocs = {};
+    for (const fileId of Object.keys(sourcePdfs)) {
+       loadedPdfDocs[fileId] = await PDFLib.PDFDocument.load(sourcePdfs[fileId]);
+    }
+
+    for (let i = 0; i < pagesWithOcr.length; i++) {
+      const pageDef = pagesWithOcr[i];
+      const sourcePdfDoc = loadedPdfDocs[pageDef.sourceFileId];
+      const [copiedPage] = await newPdf.copyPages(sourcePdfDoc, [pageDef.originalPageNum - 1]);
+      const finalPage = newPdf.addPage(copiedPage);
+      
+      const { width, height } = finalPage.getSize();
+      const scaleX = width / pageDef.ocrCanvasWidth;
+      const scaleY = height / pageDef.ocrCanvasHeight;
+
+      const words = ocrWordCache[pageDef.id];
+      
+      if (words && words.length > 0) {
+        words.forEach(word => {
+          try {
+            let text = word.text ? word.text.trim() : "";
+            text = text.replace(/[^\x20-\x7E\xA0-\xFF]/g, ''); 
+            if (!text || !word.bbox) return;
+
+            const wordHeightCanvas = word.bbox.y1 - word.bbox.y0;
+            const pdfX = word.bbox.x0 * scaleX;
+            const pdfFontSize = Math.max(4, wordHeightCanvas * scaleY); 
+            const pdfY = height - (word.bbox.y1 * scaleY) + (pdfFontSize * 0.25); 
+
+            if (isNaN(pdfX) || isNaN(pdfY) || pdfFontSize <= 0) return;
+
+            finalPage.drawText(text, {
+              x: pdfX, y: pdfY, size: pdfFontSize, font: font,
+              color: PDFLib.rgb(1, 1, 1), opacity: 0.01,
+            });
+          } catch (e) {}
+        });
+      } else {
+        finalPage.drawText(pageDef.extractedText.substring(0, 500), { x: 20, y: height - 20, size: 4, font: font, color: PDFLib.rgb(1, 1, 1), opacity: 0.01 });
+      }
+    }
+
+    if (typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal("A preparar ficheiro otimizado...");
+    const pdfBytes = await newPdf.save();
+    baixarArquivo(pdfBytes, "Material_Otimizado_IA.pdf");
+    
+    if (typeof showToast === 'function') showToast("Material otimizado com sucesso!", "success");
+    
+  } catch (err) {
+    console.error("Erro ao gravar OCR:", err);
+    throw err;
+  }
+};
+
+window.baixarArquivo = function(uint8Array, filename) {
+  const blob = new Blob([uint8Array], { type: "application/pdf" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
+window.abrirModalLeituraOcr = function(pageId, e) {
+  if (e) e.stopPropagation();
+  const page = pdfState.find(p => p.id === pageId);
+  if (!page || !page.extractedText) return;
+  if (typeof abrirModalResultadoIA === 'function') {
+      abrirModalResultadoIA("Leitura Bruta do Scanner (Pág. " + page.originalPageNum + ")", page.extractedText);
+  }
+};
+
+/* --------------------------------------------------------------------------
+   5. MOTOR DE EDITAL (IA) E CRIAÇÃO DE JORNADA INTELIGENTE
+   -------------------------------------------------------------------------- */
+let jornadaPendenteValidacao = null;
+
+window.abrirModalPreEdital = function() {
+    document.getElementById('ia-edital-cargo').value = '';
+    document.getElementById('ia-edital-file').value = '';
+    const modalEl = document.getElementById('modalPreEditalIA');
+    if (modalEl) new bootstrap.Modal(modalEl).show();
+};
+
+window.submeterEditalIA = function() {
+    const cargo = document.getElementById('ia-edital-cargo').value.trim();
+    const nivel = document.getElementById('ia-edital-nivel') ? document.getElementById('ia-edital-nivel').value : "Nível Superior";
+    const fileInput = document.getElementById('ia-edital-file');
+    
+    if(!cargo) { alert("Informe o cargo ou curso desejado."); return; }
+    if(!fileInput.files || fileInput.files.length === 0) { alert("Anexe o ficheiro do edital."); return; }
+    
+    const file = fileInput.files[0];
+    if (file.type !== "application/pdf") {
+        alert("O motor de IA suporta apenas ficheiros PDF. Converta o documento e tente novamente.");
+        return;
+    }
+    
+    try { bootstrap.Modal.getInstance(document.getElementById('modalPreEditalIA')).hide(); } catch(e) {}
+    
+    iniciarLeituraDeEdital(file, cargo, nivel);
+};
+
+window.iniciarLeituraDeEdital = async function(file, cargoAlvo, nivelAlvo) {
+  const apiKey = localStorage.getItem('gemini_api_key');
+  if (!apiKey) {
+    alert("ERRO: Falta a chave da API do Gemini!\nVá às Configurações (ícone da engrenagem no topo direito) e conecte a sua chave.");
+    return;
+  }
+
+  if(typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal(`A dissecar Quadro de Provas e Anexos para: ${cargoAlvo}...`);
+
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const typedarray = new Uint8Array(arrayBuffer);
+    const pdf = await pdfjsLib.getDocument({ data: typedarray }).promise;
+    
+    let rawText = "";
+    const maxPages = Math.min(pdf.numPages, 60); 
+    for (let i = 1; i <= maxPages; i++) {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      rawText += textContent.items.map(item => item.str).join(' ') + "\n";
+    }
+
+    const prompt = `Atue como um Especialista em Planeamento de Estudos para Concursos Públicos.
+    O candidato deseja organizar os estudos ESPECIFICAMENTE para o cargo/vaga de "${cargoAlvo}" (Escolaridade: ${nivelAlvo}).
+
+    INSTRUÇÕES DE EXTRAÇÃO ABSOLUTA E CRÍTICA:
+    1. QUADRO DE PROVAS (PESOS REAIS): Localize no documento a tabela ou secção chamada "Estrutura das Provas", "Quadro de Provas" ou "Avaliação". Encontre as matérias exatas para o cargo "${cargoAlvo}" ou para a escolaridade "${nivelAlvo}". Extraia o PESO exato (ou valor em pontos de cada questão) definido nas regras. É PROIBIDO inventar pesos.
+    2. CONTEÚDO PROGRAMÁTICO (TÓPICOS): Localize a secção de Conteúdos Programáticos (geralmente nos anexos finais).
+    3. CRUZAMENTO DE DADOS: 
+       - Para as matérias básicas (como Língua Portuguesa, Legislação, Informática), procure os tópicos que estão agrupados sob a secção de "${nivelAlvo}".
+       - Para a matéria de "Conhecimentos Específicos", localize EXATAMENTE o bloco de texto referente ao cargo "${cargoAlvo}". IGNORE ABSOLUTAMENTE os conhecimentos específicos de outros cargos.
+    4. Quebre o bloco de texto de cada matéria numa lista lógica e fragmentada de tópicos de estudo.
+
+    RETORNO OBRIGATÓRIO (JSON PURO, SEM MARKDOWNS, SEM TEXTO INTRODUTÓRIO):
+    {
+      "titulo": "${cargoAlvo}",
+      "tipo": "Concurso Público",
+      "nivel": "${nivelAlvo}",
+      "materias": [
+        {
+          "nome": "Nome Exato da Matéria no Quadro de Provas (ex: Conhecimentos Específicos)",
+          "peso_sugerido": 2.5, 
+          "topicos": [ "Tópico 1", "Tópico 2" ]
+        }
+      ]
+    }`;
+
+    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=" + apiKey, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt + "\n\nDOCUMENTO:\n" + rawText }] }],
+        generationConfig: { temperature: 0.1 }
+      })
+    });
+
+    const data = await response.json();
+    if (data.error) throw new Error(data.error.message);
+    
+    let jsonString = data.candidates[0].content.parts[0].text;
+    jsonString = jsonString.replace(/```json/g, '').replace(/```/g, '').trim();
+    
+    jornadaPendenteValidacao = JSON.parse(jsonString);
+
+    renderizarRevisaoEdital(jornadaPendenteValidacao);
+
+  } catch (error) {
+    console.error("Erro na leitura da IA:", error);
+    
+    // Tratamento amigável para quando o servidor da Google estiver sobrecarregado
+    if (error.message.includes("high demand") || error.message.includes("503") || error.message.includes("overloaded")) {
+        alert("A Inteligência Artificial da Google está com muitos acessos neste momento. Por favor, aguarde 15 segundos e tente novamente!");
+    } else {
+        alert("Falha na Leitura IA: " + error.message);
+    }
+    
+  } finally {
+    if(typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
+  }
+};
+
+window.renderizarRevisaoEdital = function(jornadaData) {
+  const container = document.getElementById('tree-materias-edital');
+  if(!container) return;
+  container.innerHTML = ''; 
+
+  jornadaData.materias.forEach((materia, index) => {
+    const collapseId = `collapse-materia-${index}`;
+    
+    let topicosHtml = materia.topicos.map(t => 
+      `<div class="d-flex align-items-center mb-2 topico-item">
+        <i class="material-icons text-muted me-2" style="font-size:16px;">subdirectory_arrow_right</i>
+        <input type="text" class="form-control form-control-sm bg-light input-topico" value="${escapeHtml(t)}">
+        <button type="button" class="btn btn-link text-danger p-0 ms-2" onclick="this.parentElement.remove();" title="Remover Tópico">
+           <i class="material-icons" style="font-size:18px;">delete</i>
+        </button>
+      </div>`
+    ).join('');
+
+    container.innerHTML += `
+      <div class="accordion-item mb-3 border rounded-3 overflow-hidden materia-item">
+        <h2 class="accordion-header position-relative">
+          <button class="accordion-button collapsed fw-bold bg-white text-dark pe-5" type="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}">
+            <i class="material-icons me-2 text-primary">menu_book</i> 
+            <input type="text" class="form-control form-control-sm fw-bold border-0 bg-transparent p-0 input-materia-nome" value="${escapeHtml(materia.nome)}" onclick="event.stopPropagation()" style="width: auto; min-width: 150px;">
+          </button>
+          
+          <div class="position-absolute d-flex align-items-center gap-2" style="right: 50px; top: 12px; z-index: 10;">
+             <span class="small fw-bold text-secondary">Peso</span>
+             <input type="number" class="form-control form-control-sm text-center border-secondary input-materia-peso" value="${materia.peso_sugerido || 1}" min="0.1" max="10" step="0.1" onclick="event.stopPropagation()" style="width: 55px; height: 26px;">
+             <button type="button" class="btn btn-sm btn-outline-danger border-0 p-1 d-flex align-items-center justify-content-center" onclick="this.closest('.materia-item').remove(); event.stopPropagation();" title="Excluir Matéria">
+                <i class="material-icons" style="font-size: 18px;">delete_forever</i>
+             </button>
+          </div>
+        </h2>
+        <div id="${collapseId}" class="accordion-collapse collapse" data-bs-parent="#tree-materias-edital">
+          <div class="accordion-body bg-white border-top">
+             <div class="mb-3 d-flex justify-content-between align-items-center">
+                <span class="fw-bold small text-secondary">Tópicos para Estudar</span>
+                <button type="button" class="btn btn-sm btn-outline-primary rounded-pill py-0" style="font-size: 11px;" onclick="adicionarTopicoUI(this)">+ Tópico</button>
+             </div>
+             <div class="topicos-container">
+                ${topicosHtml}
+             </div>
+          </div>
+        </div>
+      </div>`;
+  });
+
+  const modalEl = document.getElementById('modalValidarEdital');
+  if (modalEl) new bootstrap.Modal(modalEl).show();
+};
+
+window.adicionarTopicoUI = function(btnElement) {
+    const container = btnElement.closest('.accordion-body').querySelector('.topicos-container');
+    const newDiv = document.createElement('div');
+    newDiv.className = 'd-flex align-items-center mb-2 topico-item';
+    newDiv.innerHTML = `
+        <i class="material-icons text-muted me-2" style="font-size:16px;">subdirectory_arrow_right</i>
+        <input type="text" class="form-control form-control-sm bg-light input-topico" placeholder="Novo tópico...">
+        <button type="button" class="btn btn-link text-danger p-0 ms-2" onclick="this.parentElement.remove()">
+           <i class="material-icons" style="font-size:18px;">delete</i>
+        </button>
+    `;
+    container.appendChild(newDiv);
+};
+
+window.salvarNovaJornada = function() {
+  const email = localStorage.getItem('usuario_email');
+  if (!email) {
+      alert("Erro: Sessão inválida.");
+      return;
+  }
+
+  const materiasDOM = document.querySelectorAll('.materia-item');
+  let materiasAtualizadas = [];
+
+  materiasDOM.forEach(matEl => {
+      const nomeMateria = matEl.querySelector('.input-materia-nome').value.trim();
+      const pesoMateria = parseFloat(matEl.querySelector('.input-materia-peso').value) || 1;
+      
+      const topicosDOM = matEl.querySelectorAll('.input-topico');
+      let topicosArr = [];
+      topicosDOM.forEach(topEl => {
+          if (topEl.value.trim() !== "") topicosArr.push(topEl.value.trim());
+      });
+
+      if (nomeMateria) {
+          materiasAtualizadas.push({
+              nome: nomeMateria,
+              peso_sugerido: pesoMateria,
+              topicos: topicosArr
+          });
+      }
+  });
+
+  if (materiasAtualizadas.length === 0) {
+      alert("A jornada precisa de ter pelo menos uma matéria.");
+      return;
+  }
+
+  if (!jornadaPendenteValidacao) jornadaPendenteValidacao = { tipo: "Concurso Público" };
+  jornadaPendenteValidacao.titulo = document.getElementById('ia-edital-cargo') ? document.getElementById('ia-edital-cargo').value : "Jornada IA";
+  jornadaPendenteValidacao.nivel = document.getElementById('ia-edital-nivel') ? document.getElementById('ia-edital-nivel').value : "Nível Superior";
+  jornadaPendenteValidacao.materias = materiasAtualizadas;
+
+  if(typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal("A criar a sua Jornada na Base de Dados...");
+
+  google.script.run.withSuccessHandler((resposta) => {
+      if(typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
+      
+      if (resposta.success) {
+          try { bootstrap.Modal.getInstance(document.getElementById('modalValidarEdital')).hide(); } catch(e){}
+          
+          if(typeof showToast === 'function') showToast("Jornada criada com sucesso!", "success");
+          if(typeof ganharXP === 'function') ganharXP(50);
+          
+          if(typeof carregarJornadasAtivas === 'function') carregarJornadasAtivas();
+          if(typeof mostrarView === 'function') mostrarView('jornadas-view');
+      } else {
+          alert("Erro ao guardar na Base de Dados: " + resposta.error);
+      }
+  }).withFailureHandler((erro) => {
+      if(typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
+      alert("Falha de conexão com o servidor. Verifique a autorização no Apps Script.");
+  }).salvarJornadaBD(email, jornadaPendenteValidacao);
+};
+</script>
