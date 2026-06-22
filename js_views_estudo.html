@@ -1,6 +1,6 @@
 <script>
 /* ==========================================================================
-   ESTAÇÃO DE ESTUDOS IA - FUNCIONALIDADES DE ESTUDO (js_views_estudo.html)
+   ESTAÇÃO DE ESTUDOS IA - CHAT E LEITOR (js_views_estudo.html)
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
@@ -50,7 +50,6 @@ function prepararWorkspaceDoChat() {
     return;
   }
 
-  // Miniaturas na barra lateral do chat
   pdfState.forEach((page, index) => {
     const thumbDiv = document.createElement('div');
     thumbDiv.className = 'text-center mb-3 position-relative';
@@ -95,7 +94,7 @@ async function enviarMensagemChat() {
   historyEl.innerHTML += `
     <div class="chat-bubble user-bubble shadow-sm">
       <div class="bubble-header"><i class="material-icons">person</i> Você</div>
-      ${pergunta}
+      ${escapeHtml(pergunta)}
     </div>`;
   
   inputEl.value = ""; inputEl.disabled = true; 
@@ -154,185 +153,7 @@ async function enviarMensagemChat() {
 }
 
 /* --------------------------------------------------------------------------
-   2. RENDERIZAÇÃO DE RESULTADOS DA IA E MAPAS MENTAIS
-   -------------------------------------------------------------------------- */
-
-function abrirModalResultadoIA(titulo, textoMarkdown) {
-  let modal = document.getElementById('modal-ia-resultado');
-  
-  const formatarMarkdown = (md) => {
-    let mermaidBlocks = [];
-    let hasMermaid = false;
-    const userTheme = document.getElementById('ia-mindmap-theme') ? document.getElementById('ia-mindmap-theme').value : 'default';
-    
-    let tempMd = md.replace(/```mermaid([\s\S]*?)```/g, (match, code) => {
-       hasMermaid = true;
-       let cleanCode = `%%{init: {'theme': '${userTheme}'}}%%\n` + code.trim().replace(/&/g, 'e');
-       mermaidBlocks.push(cleanCode);
-       return `__COFRE_MERMAID_${mermaidBlocks.length - 1}__`;
-    });
-
-    let html = tempMd
-      .replace(/^### (.*$)/gim, '<h4 class="fw-bold mt-3">$1</h4>')
-      .replace(/^## (.*$)/gim, '<h3 class="fw-bold mt-4">$1</h3>')
-      .replace(/^# (.*$)/gim, '<h2 class="fw-bold mt-4">$1</h2>')
-      .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
-      .replace(/^\* (.*$)/gim, '<li>$1</li>');
-    
-    html = html.replace(/<\/li>\n<li>/gim, '</li><li>').replace(/\n/gim, '<br>');
-
-    if (hasMermaid) {
-       mermaidBlocks.forEach((code, index) => {
-          const container = `
-            <div class="mermaid-wrapper w-100 mt-3 mb-4 shadow-sm p-2" style="background: var(--bg-input); border-color: var(--border-color);">
-                <div class="d-flex justify-content-end mb-2 gap-2">
-                    <button class="btn btn-sm border" style="background: var(--bg-card); color: var(--text-main);" onclick="zoomMermaid(-0.3)"><i class="material-icons">zoom_out</i></button>
-                    <button class="btn btn-sm border" style="background: var(--bg-card); color: var(--text-main);" onclick="zoomMermaid(0.3)"><i class="material-icons">zoom_in</i></button>
-                    <button class="btn btn-sm btn-primary" onclick="baixarMapaMentalPng()"><i class="material-icons">download</i> Salvar PNG</button>
-                </div>
-                <div id="mermaid-pan-zoom" style="overflow: hidden; width: 100%; height: 400px; display: flex; align-items: center; justify-content: center; cursor: grab; position: relative;">
-                    <div class="mermaid" style="position: absolute; transform-origin: center;">${code}</div>
-                </div>
-            </div>`;
-          html = html.replace(`__COFRE_MERMAID_${index}__`, container);
-       });
-    }
-    return { html: html, hasMermaid: hasMermaid };
-  };
-
-  if (!modal) {
-    modal = document.createElement('div');
-    modal.id = 'modal-ia-resultado';
-    modal.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15,23,42,0.8); z-index:10600; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(5px); padding:20px;';
-    document.body.appendChild(modal);
-  }
-
-  const formatedData = formatarMarkdown(textoMarkdown);
-
-  modal.innerHTML = `
-  <div style="background: var(--bg-card); color: var(--text-main); width:100%; max-width:900px; height:85vh; border-radius:var(--radius-lg); display:flex; flex-direction:column; overflow:hidden; box-shadow:var(--shadow-lg); border: 1px solid var(--border-color);">
-    <div class="d-flex justify-content-between align-items-center p-3 border-bottom" style="background: var(--bg-input);">
-      <h4 class="fw-bold m-0 d-flex align-items-center text-primary"><i class="material-icons me-2">auto_awesome</i> ${titulo}</h4>
-      <button class="btn btn-light rounded-circle p-1 d-flex align-items-center justify-content-center border-0" style="background: transparent; color: var(--text-main);" onclick="document.getElementById('modal-ia-resultado').style.display='none';"><i class="material-icons">close</i></button>
-    </div>
-    <div style="flex:1; overflow-y:auto; padding:30px; font-size:15px; line-height:1.6;">
-      ${formatedData.html}
-    </div>
-  </div>`;
-  
-  modal.style.display = 'flex';
-
-  if (formatedData.hasMermaid && typeof mermaid !== 'undefined') {
-     setTimeout(() => {
-         try {
-             mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' });
-             mermaid.init(undefined, document.querySelectorAll('.mermaid'));
-             if(typeof iniciarPanZoomMermaid === 'function') iniciarPanZoomMermaid();
-         } catch (e) { console.error("Erro no Mermaid:", e); }
-     }, 100);
-  }
-}
-
-window.currentMermaidScale = 1;
-window.zoomMermaid = function(step) {
-    window.currentMermaidScale += step;
-    if (window.currentMermaidScale < 0.3) window.currentMermaidScale = 0.3;
-    if (window.currentMermaidScale > 5.0) window.currentMermaidScale = 5.0; 
-    const mermaidDiv = document.querySelector('.mermaid');
-    if(mermaidDiv) mermaidDiv.style.transform = `scale(${window.currentMermaidScale})`;
-};
-
-window.baixarMapaMentalPng = function() {
-  if (typeof showToast === 'function') {
-      showToast("Para salvar o gráfico, clique com o botão direito sobre ele e selecione 'Guardar imagem como...'", "info");
-  }
-};
-
-/* --------------------------------------------------------------------------
-   3. QUIZ INTERATIVO E SIMULADOS
-   -------------------------------------------------------------------------- */
-window.quizDataAtual = null; 
-
-function abrirModalQuizInterativo(quizData) {
-    window.quizDataAtual = quizData;
-    let modal = document.getElementById('modal-ia-quiz');
-    
-    if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'modal-ia-quiz';
-        modal.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15,23,42,0.9); z-index:10600; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(8px); padding:20px;';
-        document.body.appendChild(modal);
-    }
-
-    let html = `
-    <div style="background: var(--bg-body); width:100%; max-width:900px; height:90vh; border-radius:var(--radius-lg); box-shadow:var(--shadow-lg); display:flex; flex-direction:column; overflow:hidden; border: 1px solid var(--border-color);">
-        <div class="d-flex justify-content-between align-items-center p-4 border-bottom" style="background: var(--bg-card);">
-            <div>
-                <span class="badge bg-success mb-2 px-3 py-2 rounded-pill fw-bold">Modo Simulado</span>
-                <h3 class="fw-bold m-0" style="color: var(--text-main);">${quizData.titulo}</h3>
-            </div>
-            <button class="btn btn-light rounded-circle p-1 d-flex align-items-center justify-content-center border-0" style="background: transparent; color: var(--text-main);" onclick="document.getElementById('modal-ia-quiz').style.display='none';"><i class="material-icons">close</i></button>
-        </div>
-        <div id="quiz-container-scroll" style="flex:1; overflow-y:auto; padding:30px;">`;
-
-    quizData.questoes.forEach((q, qIndex) => {
-        html += `
-            <div class="quiz-card position-relative" id="q-card-${qIndex}">
-                <div class="quiz-question-text fw-bold mb-3" style="color: var(--text-main);"><span class="text-success me-2">Q${qIndex + 1}.</span> ${q.enunciado.replace(/\n/g, '<br>')}</div>
-                <div class="quiz-options-list">`;
-        
-        q.opcoes.forEach((op, oIndex) => {
-            html += `
-                <div class="quiz-option" id="opt-${qIndex}-${oIndex}" onclick="resolverQuestao(${qIndex}, ${oIndex}, ${q.indice_correto})">
-                    <div style="width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--border-color); display:flex; align-items:center; justify-content:center; flex-shrink:0;" class="opt-circle"></div>
-                    <div class="ms-2">${op}</div>
-                </div>`;
-        });
-
-        html += `
-                </div>
-                <div class="quiz-feedback shadow-sm mt-3" id="feedback-${qIndex}" style="display:none; padding:15px; border-radius:var(--radius-sm); border-left:4px solid var(--primary); background: var(--bg-active);">
-                    <div class="fw-bold mb-1" style="color: var(--text-main);">Gabarito Comentado:</div>
-                    <div class="small" style="line-height:1.6; color: var(--text-muted);">${q.explicacao}</div>
-                </div>
-            </div>`;
-    });
-
-    html += `
-        </div>
-        <div class="p-3 border-top d-flex justify-content-between align-items-center" style="background: var(--bg-card);">
-            <span class="text-muted small fw-bold ms-2">${quizData.questoes.length} Questões Analisadas</span>
-        </div>
-    </div>`;
-    
-    modal.innerHTML = html;
-    modal.style.display = 'flex';
-}
-
-window.resolverQuestao = function(qIndex, clicadaIndex, corretaIndex) {
-    const card = document.getElementById(`q-card-${qIndex}`);
-    if (card.classList.contains('respondida')) return; 
-    card.classList.add('respondida');
-
-    document.getElementById(`feedback-${qIndex}`).style.display = 'block';
-
-    const opcoes = card.querySelectorAll('.quiz-option');
-    opcoes.forEach((op, index) => {
-        const circulo = op.querySelector('.opt-circle');
-        if (index === corretaIndex) {
-            op.classList.add('show-correct');
-            circulo.innerHTML = '<i class="material-icons" style="font-size:16px; color:var(--success);">check</i>';
-            circulo.style.borderColor = 'var(--success)';
-        } else if (index === clicadaIndex && clicadaIndex !== corretaIndex) {
-            op.classList.add('selected-wrong');
-            circulo.innerHTML = '<i class="material-icons" style="font-size:16px; color:var(--danger);">close</i>';
-            circulo.style.borderColor = 'var(--danger)';
-        }
-    });
-};
-
-/* --------------------------------------------------------------------------
-   4. LEITOR IMERSIVO (Objeto TTS e UX)
+   2. LEITOR IMERSIVO (Objeto TTS e UX)
    -------------------------------------------------------------------------- */
 
 window.LeitorTTS = {
@@ -410,7 +231,6 @@ async function executarLeituraFerramenta() {
         if (!modal) {
             modal = document.createElement('div');
             modal.id = 'modal-leitor-imersivo';
-            // Transparência adaptável via CSS Variables
             modal.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; display:flex; flex-direction:column; background: var(--bg-body); z-index: 10700; opacity: 0.98;';
             document.body.appendChild(modal);
         }
