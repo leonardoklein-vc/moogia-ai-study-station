@@ -1,32 +1,43 @@
 <script>
 /* ==========================================================================
-   ESTAÇÃO DE ESTUDOS IA - CHAT E LEITOR (js_views_estudo.html)
+   DOCUMENT WORKSPACE - CHAT E LEITOR (PUBLIC_SAFE)
+   ==========================================================================
+   Publicação GitHub:
+   - Credenciais removidas.
+   - Endpoint de IA removido.
+   - Prompt estratégico substituído por "PROMPT AQUI".
+   - Nomes de produto/fluxo trocados por termos genéricos.
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
-   1. CHAT INTELIGENTE (COPILOTO IA)
+   1. CHAT COM IA
    -------------------------------------------------------------------------- */
 
 function alternarWorkspaceChat(ativar) {
   const chatWorkspace = document.getElementById('chat-workspace');
-  const pdfGridArea = document.getElementById('pdf-preview-area'); 
+  const pdfGridArea = document.getElementById('pdf-preview-area');
   const historyEl = document.getElementById('chat-history');
 
   if (ativar) {
-    document.body.classList.add('mode-chat-active'); 
-    if(chatWorkspace) {
+    document.body.classList.add('mode-chat-active');
+
+    if (chatWorkspace) {
       chatWorkspace.classList.remove('d-none');
       chatWorkspace.style.display = 'flex';
     }
+
     if (pdfGridArea) pdfGridArea.style.display = 'none';
+
     prepararWorkspaceDoChat();
   } else {
-    document.body.classList.remove('mode-chat-active'); 
-    if(chatWorkspace) {
+    document.body.classList.remove('mode-chat-active');
+
+    if (chatWorkspace) {
       chatWorkspace.classList.add('d-none');
       chatWorkspace.style.display = 'none';
     }
-    if (pdfGridArea) pdfGridArea.style.display = 'flex'; 
+
+    if (pdfGridArea) pdfGridArea.style.display = 'flex';
   }
 }
 
@@ -34,19 +45,26 @@ function prepararWorkspaceDoChat() {
   const sidebar = document.getElementById('chat-sidebar');
   const historyEl = document.getElementById('chat-history');
   const inputEl = document.getElementById('chat-input');
-  
+
   if (!sidebar || !historyEl) return;
 
-  sidebar.innerHTML = '<div class="small fw-bold text-secondary mb-3 text-center">MATERIAIS NA MESA</div>';
-  
+  sidebar.innerHTML = '<div class="small fw-bold text-secondary mb-3 text-center">DOCUMENTOS NO WORKSPACE</div>';
+
   if (!pdfState || pdfState.length === 0) {
-    sidebar.innerHTML += '<div class="text-muted small text-center mt-3 p-2 border rounded" style="border-color: var(--border-color) !important;">A aguardar material de estudo...</div>';
+    sidebar.innerHTML += `
+      <div class="text-muted small text-center mt-3 p-2 border rounded" style="border-color: var(--border-color) !important;">
+        Aguardando documento...
+      </div>`;
+
     historyEl.innerHTML = `
       <div class="chat-bubble ai-bubble shadow-sm" style="border-left: 4px solid var(--danger);">
-        <div class="bubble-header" style="color: var(--danger);"><i class="material-icons">error_outline</i> Mesa Vazia</div>
-        Ainda não há nenhum material carregado na mesa. Adicione um documento para começarmos a estudar.
+        <div class="bubble-header" style="color: var(--danger);">
+          <i class="material-icons">error_outline</i> Workspace vazio
+        </div>
+        Nenhum documento foi carregado. Adicione um arquivo para iniciar a análise.
       </div>`;
-    if(inputEl) inputEl.disabled = true;
+
+    if (inputEl) inputEl.disabled = true;
     return;
   }
 
@@ -60,79 +78,101 @@ function prepararWorkspaceDoChat() {
     sidebar.appendChild(thumbDiv);
   });
 
-  if (historyEl.innerHTML.trim() === '' || historyEl.innerHTML.includes('Mesa Vazia')) {
-      historyEl.innerHTML = `
-        <div class="chat-bubble ai-bubble shadow-sm" style="border-left: 4px solid var(--success);">
-          <div class="bubble-header" style="color: var(--success);"><i class="material-icons">task</i> Tudo Pronto</div>
-          Excelente! Já analisei as <b>${pdfState.length} página(s)</b> deste material. Que dúvidas tens sobre a matéria?
-        </div>`;
+  if (historyEl.innerHTML.trim() === '' || historyEl.innerHTML.includes('Workspace vazio')) {
+    historyEl.innerHTML = `
+      <div class="chat-bubble ai-bubble shadow-sm" style="border-left: 4px solid var(--success);">
+        <div class="bubble-header" style="color: var(--success);">
+          <i class="material-icons">task</i> Pronto
+        </div>
+        Documento carregado com <b>${pdfState.length} página(s)</b>. Faça uma pergunta sobre o conteúdo.
+      </div>`;
   }
-  if(inputEl) inputEl.disabled = false;
+
+  if (inputEl) inputEl.disabled = false;
 }
 
 async function enviarMensagemChat() {
-  const apiKey = localStorage.getItem('gemini_api_key');
-  
+  const apiKey = localStorage.getItem('SUA_CHAVE_API_AQUI');
+
   if (!apiKey) {
-    if (typeof showToast === 'function') showToast("Configure a chave do motor de IA primeiro.", "warning");
+    if (typeof showToast === 'function') {
+      showToast("Configure a chave de IA primeiro.", "warning");
+    }
+
     const modalEl = document.getElementById('modalConfiguracoes');
     if (modalEl && typeof bootstrap !== 'undefined') {
-       const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
-       bsModal.show();
-       const tabApi = document.querySelector('[data-bs-target="#config-api"]');
-       if(tabApi) tabApi.click();
+      const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+      bsModal.show();
+
+      const tabApi = document.querySelector('[data-bs-target="#config-api"]');
+      if (tabApi) tabApi.click();
     }
+
     return;
   }
 
   const inputEl = document.getElementById('chat-input');
   const pergunta = inputEl.value.trim();
+
   if (!pergunta) return;
 
   const historyEl = document.getElementById('chat-history');
-  
+
   historyEl.innerHTML += `
     <div class="chat-bubble user-bubble shadow-sm">
-      <div class="bubble-header"><i class="material-icons">person</i> Você</div>
+      <div class="bubble-header"><i class="material-icons">person</i> Usuário</div>
       ${escapeHtml(pergunta)}
     </div>`;
-  
-  inputEl.value = ""; inputEl.disabled = true; 
+
+  inputEl.value = "";
+  inputEl.disabled = true;
   historyEl.scrollTop = historyEl.scrollHeight;
 
   const typingId = 'typing-' + Date.now();
+
   historyEl.innerHTML += `
     <div id="${typingId}" class="chat-bubble ai-bubble shadow-sm">
-      <div class="bubble-header"><i class="material-icons">auto_awesome</i> Tutor IA</div>
+      <div class="bubble-header"><i class="material-icons">auto_awesome</i> Assistente IA</div>
       <small class="text-muted font-monospace d-flex align-items-center gap-2">
-         <span class="spinner-grow spinner-grow-sm text-primary" role="status" style="width: 12px; height: 12px;"></span> A pesquisar nos teus apontamentos...
+        <span class="spinner-grow spinner-grow-sm text-primary" role="status" style="width: 12px; height: 12px;"></span>
+        Processando documento...
       </small>
     </div>`;
+
   historyEl.scrollTop = historyEl.scrollHeight;
 
   try {
-    const rawText = await extrairTextoDasPaginasSelecionadas(); 
-    
-    const prompt = "Aja como um tutor particular ajudando um aluno. " +
-    "REGRA 1: Responda a pergunta baseando-se ÚNICA E EXCLUSIVAMENTE no texto fornecido abaixo. Se não encontrar, diga de forma didática que não encontrou essa informação no material. " +
-    "REGRA 2: Se for apenas uma saudação, responda educadamente e pergunte o que o aluno deseja estudar. " +
-    "PERGUNTA DO ALUNO: " + pergunta;
+    const rawText = await extrairTextoDasPaginasSelecionadas();
 
-    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=" + apiKey, {
+    const prompt = "PROMPT AQUI" + "\n\nPERGUNTA_DO_USUARIO:\n" + pergunta;
+
+    const response = await fetch("SUA_URL_DE_ENDPOINT_IA_AQUI?key=" + apiKey, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt + "\n\nMATERIAL DE ESTUDO:\n" + rawText }] }],
-        generationConfig: { temperature: 0.3 } 
+        contents: [
+          {
+            parts: [
+              {
+                text: prompt + "\n\nDOCUMENTO:\n" + rawText
+              }
+            ]
+          }
+        ],
+        generationConfig: {
+          temperature: 0.3
+        }
       })
     });
 
     const data = await response.json();
+
     if (data.error) throw new Error(data.error.message);
+
     const respostaMarkdown = data.candidates[0].content.parts[0].text;
 
     document.getElementById(typingId).remove();
-    
+
     let htmlRes = respostaMarkdown
       .replace(/\*\*(.*)\*\*/gim, '<b>$1</b>')
       .replace(/\*(.*)\*/gim, '<i>$1</i>')
@@ -140,69 +180,93 @@ async function enviarMensagemChat() {
 
     historyEl.innerHTML += `
       <div class="chat-bubble ai-bubble shadow-sm">
-        <div class="bubble-header"><i class="material-icons">auto_awesome</i> Tutor IA</div>
+        <div class="bubble-header"><i class="material-icons">auto_awesome</i> Assistente IA</div>
         ${htmlRes}
       </div>`;
 
   } catch (error) {
-    document.getElementById(typingId).innerHTML = '<span class="text-danger"><i class="material-icons align-middle fs-6">error</i> Falha na comunicação: ' + error.message + '</span>';
+    const typingEl = document.getElementById(typingId);
+
+    if (typingEl) {
+      typingEl.innerHTML = `
+        <span class="text-danger">
+          <i class="material-icons align-middle fs-6">error</i>
+          Falha na comunicação: ${escapeHtml(error.message)}
+        </span>`;
+    }
   } finally {
-    inputEl.disabled = false; inputEl.focus();
+    inputEl.disabled = false;
+    inputEl.focus();
     historyEl.scrollTop = historyEl.scrollHeight;
   }
 }
 
 /* --------------------------------------------------------------------------
-   2. LEITOR IMERSIVO (Objeto TTS e UX)
+   2. LEITOR IMERSIVO / TTS
    -------------------------------------------------------------------------- */
 
 window.LeitorTTS = {
   synth: window.speechSynthesis,
   utterance: null,
   isPaused: false,
-  
+
   ler: function(texto, btnElement) {
     if (this.synth.speaking) {
       if (this.isPaused) {
         this.synth.resume();
         this.isPaused = false;
-        if(btnElement) btnElement.innerHTML = '<i class="material-icons fs-4">pause</i>';
+
+        if (btnElement) {
+          btnElement.innerHTML = '<i class="material-icons fs-4">pause</i>';
+        }
       } else {
         this.synth.pause();
         this.isPaused = true;
-        if(btnElement) btnElement.innerHTML = '<i class="material-icons fs-4">play_arrow</i>';
+
+        if (btnElement) {
+          btnElement.innerHTML = '<i class="material-icons fs-4">play_arrow</i>';
+        }
       }
+
       return;
     }
 
-    let textoLimpo = texto.replace(/<[^>]*>?/gm, '').replace(/[*#_]/g, '');
+    let textoLimpo = texto
+      .replace(/<[^>]*>?/gm, '')
+      .replace(/[*#_]/g, '');
+
     this.utterance = new SpeechSynthesisUtterance(textoLimpo);
-    this.utterance.rate = 1.05; 
-    
+    this.utterance.rate = 1.05;
+
     let vozes = this.synth.getVoices();
-    let vozPremium = 
-        vozes.find(v => v.name.includes('Google português do Brasil')) || 
-        vozes.find(v => v.name.includes('Online (Natural)') || v.name.includes('Francisca')) || 
-        vozes.find(v => v.lang === 'pt-BR' && v.name.includes('Online')) || 
-        vozes.find(v => v.lang === 'pt-BR'); 
-        
-    if (vozPremium) this.utterance.voice = vozPremium;
-    else this.utterance.lang = 'pt-BR'; 
+
+    let vozPreferencial =
+      vozes.find(v => v.lang === 'pt-BR') ||
+      vozes.find(v => v.lang && v.lang.startsWith('pt')) ||
+      vozes[0];
+
+    if (vozPreferencial) {
+      this.utterance.voice = vozPreferencial;
+    } else {
+      this.utterance.lang = 'pt-BR';
+    }
 
     if (btnElement && !btnElement.dataset.htmlOriginal) {
-        btnElement.dataset.htmlOriginal = btnElement.innerHTML;
+      btnElement.dataset.htmlOriginal = btnElement.innerHTML;
     }
 
     this.utterance.onend = () => {
       this.isPaused = false;
-      if(btnElement && btnElement.dataset.htmlOriginal) {
-          btnElement.innerHTML = btnElement.dataset.htmlOriginal;
+
+      if (btnElement && btnElement.dataset.htmlOriginal) {
+        btnElement.innerHTML = btnElement.dataset.htmlOriginal;
       }
     };
 
-    if(btnElement) {
-        btnElement.innerHTML = '<i class="material-icons fs-4">pause</i>';
+    if (btnElement) {
+      btnElement.innerHTML = '<i class="material-icons fs-4">pause</i>';
     }
+
     this.synth.speak(this.utterance);
   },
 
@@ -212,54 +276,77 @@ window.LeitorTTS = {
   }
 };
 
-document.addEventListener('keydown', (e) => { 
-    if (e.key === 'Escape' && window.LeitorTTS) window.LeitorTTS.parar(); 
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && window.LeitorTTS) {
+    window.LeitorTTS.parar();
+  }
 });
 
 if (speechSynthesis.onvoiceschanged !== undefined) {
-    speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+  speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
 }
 
 async function executarLeituraFerramenta() {
-    if (typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal("A extrair e preparar texto do material...");
-    
-    try {
-        const textoExtraido = await extrairTextoDasPaginasSelecionadas(); 
-        let textoLimpo = textoExtraido.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
-        
-        let modal = document.getElementById('modal-leitor-imersivo');
-        if (!modal) {
-            modal = document.createElement('div');
-            modal.id = 'modal-leitor-imersivo';
-            modal.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; display:flex; flex-direction:column; background: var(--bg-body); z-index: 10700; opacity: 0.98;';
-            document.body.appendChild(modal);
-        }
+  if (typeof mostrarLoaderGlobal === 'function') {
+    mostrarLoaderGlobal("Extraindo texto do documento...");
+  }
 
-        modal.innerHTML = `
-        <div class="w-100 border-bottom shadow-sm d-flex align-items-center justify-content-between px-4 py-3" style="background: var(--bg-card);">
-            <div class="d-flex align-items-center gap-3">
-                <button id="btn-tts-play" class="btn btn-success rounded-circle shadow-sm d-flex align-items-center justify-content-center" style="width: 50px; height: 50px;" onclick="window.LeitorTTS.ler('${escapeHtml(textoLimpo)}', this)">
-                    <i class="material-icons fs-4">play_arrow</i>
-                </button>
-                <button class="btn rounded-circle d-flex align-items-center justify-content-center border" style="width: 40px; height: 40px; color: var(--danger); background: var(--bg-input); border-color: var(--border-color) !important;" onclick="window.LeitorTTS.parar()" title="Parar Áudio">
-                    <i class="material-icons fs-5">stop</i>
-                </button>
-                <span class="ms-3 fw-bold" style="color: var(--text-main);">Estúdio de Escuta</span>
-            </div>
-            <button class="btn btn-light rounded-circle p-2 d-flex align-items-center justify-content-center border-0" style="background: transparent; color: var(--text-main);" onclick="document.getElementById('modal-leitor-imersivo').style.display='none'; window.LeitorTTS.parar();"><i class="material-icons">close</i></button>
-        </div>
-        <div class="flex-grow-1 overflow-auto d-flex justify-content-center p-5 pb-5">
-            <div style="max-width: 800px; font-size: 1.5rem; line-height: 2.2; color: var(--text-main); font-family: 'Inter', sans-serif;">
-                ${escapeHtml(textoLimpo)}
-            </div>
-        </div>`;
+  try {
+    const textoExtraido = await extrairTextoDasPaginasSelecionadas();
 
-        if (typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
-        modal.style.display = 'flex';
-        
-    } catch (error) {
-        if (typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
-        if (typeof showToast === 'function') showToast(error.message, "error");
+    let textoLimpo = textoExtraido
+      .replace(/[\r\n]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    let modal = document.getElementById('modal-leitor-imersivo');
+
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'modal-leitor-imersivo';
+      modal.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; display:flex; flex-direction:column; background: var(--bg-body); z-index: 10700; opacity: 0.98;';
+      document.body.appendChild(modal);
     }
+
+    modal.innerHTML = `
+      <div class="w-100 border-bottom shadow-sm d-flex align-items-center justify-content-between px-4 py-3" style="background: var(--bg-card);">
+        <div class="d-flex align-items-center gap-3">
+          <button id="btn-tts-play" class="btn btn-success rounded-circle shadow-sm d-flex align-items-center justify-content-center" style="width: 50px; height: 50px;" onclick="window.LeitorTTS.ler('${escapeHtml(textoLimpo)}', this)">
+            <i class="material-icons fs-4">play_arrow</i>
+          </button>
+
+          <button class="btn rounded-circle d-flex align-items-center justify-content-center border" style="width: 40px; height: 40px; color: var(--danger); background: var(--bg-input); border-color: var(--border-color) !important;" onclick="window.LeitorTTS.parar()" title="Parar áudio">
+            <i class="material-icons fs-5">stop</i>
+          </button>
+
+          <span class="ms-3 fw-bold" style="color: var(--text-main);">Leitor imersivo</span>
+        </div>
+
+        <button class="btn btn-light rounded-circle p-2 d-flex align-items-center justify-content-center border-0" style="background: transparent; color: var(--text-main);" onclick="document.getElementById('modal-leitor-imersivo').style.display='none'; window.LeitorTTS.parar();">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+
+      <div class="flex-grow-1 overflow-auto d-flex justify-content-center p-5 pb-5">
+        <div style="max-width: 800px; font-size: 1.5rem; line-height: 2.2; color: var(--text-main); font-family: 'Inter', sans-serif;">
+          ${escapeHtml(textoLimpo)}
+        </div>
+      </div>`;
+
+    if (typeof ocultarLoaderGlobal === 'function') {
+      ocultarLoaderGlobal();
+    }
+
+    modal.style.display = 'flex';
+
+  } catch (error) {
+    if (typeof ocultarLoaderGlobal === 'function') {
+      ocultarLoaderGlobal();
+    }
+
+    if (typeof showToast === 'function') {
+      showToast(error.message, "error");
+    }
+  }
 }
 </script>
