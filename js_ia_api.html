@@ -1,0 +1,142 @@
+<script>
+/* ==========================================================================
+   ESTAÇÃO DE ESTUDOS IA - COMUNICAÇÃO COM API GEMINI (js_ia_api.html)
+   ========================================================================== */
+
+async function extrairTextoDasPaginasSelecionadas() {
+  const selectedPages = pdfState.filter(function(p) { return p.selected; });
+  const pagesToProcess = selectedPages.length > 0 ? selectedPages : pdfState;
+
+  if (pagesToProcess.length === 0) throw new Error("A mesa de estudos está vazia. Adicione material primeiro.");
+
+  let extractedText = "";
+  let encontrouTextoReal = false; 
+  
+  for (let i = 0; i < pagesToProcess.length; i++) {
+    const pDef = pagesToProcess[i];
+    if (pDef.isBlank) continue;
+
+    let pageText = "";
+
+    if (pDef.extractedText) {
+      pageText = pDef.extractedText;
+    } else {
+      const arrayBuffer = sourcePdfs[pDef.sourceFileId];
+      if (!window['pdfjs-dist/build/pdf']) throw new Error("Motor de leitura de documentos não carregado.");
+
+      const pdf = await pdfjsLib.getDocument({
+        data: new Uint8Array(arrayBuffer),
+        cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/cmaps/',
+        cMapPacked: true,
+        standardFontDataUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/standard_fonts/',
+        useWorkerFetch: true
+      }).promise;
+
+      const page = await pdf.getPage(pDef.originalPageNum);
+      const textContent = await page.getTextContent();
+      pageText = textContent.items.map(function(item) { return item.str; }).join(' ');
+    }
+    
+    if (pageText.trim().length > 0) {
+      extractedText += "\n\n--- [Página " + (i + 1) + "] ---\n" + pageText + "\n";
+      encontrouTextoReal = true;
+    }
+  }
+  
+  if (!encontrouTextoReal) {
+    throw new Error("Nenhum texto encontrado. Se o material for uma imagem ou scan, use primeiro a ferramenta 'Scanner (Extrair Texto)' na Estação.");
+  }
+  
+  return extractedText;
+}
+
+async function executarIA(acao) {
+  const apiKey = localStorage.getItem('gemini_api_key');
+  
+  // ATUALIZAÇÃO CRÍTICA: Agora chama o novo Modal de Configurações Global
+  if (!apiKey) {
+    if (typeof showToast === 'function') showToast("Configure a chave do motor de IA primeiro.", "warning");
+    const modalEl = document.getElementById('modalConfiguracoes');
+    if (modalEl && typeof bootstrap !== 'undefined') {
+       const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+       bsModal.show();
+       // Alterna automaticamente para a aba de API
+       const tabApi = document.querySelector('[data-bs-target="#config-api"]');
+       if(tabApi) tabApi.click();
+    }
+    return;
+  }
+
+  try {
+    const rawText = await extrairTextoDasPaginasSelecionadas();
+    if (typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal("O Motor de IA está a analisar o material...");
+
+    let prompt = "";
+    
+    if (acao === 'summarize') {
+      const sumType = document.getElementById('ia-sum-type').value;
+      if (sumType === 'bullet') prompt = "Faça um resumo em tópicos (bullet points) dos conceitos principais deste material de estudo.";
+      else if (sumType === 'executive') prompt = "Faça um resumo executivo muito conciso e direto deste material.";
+      else prompt = "Aja como um professor particular experiente. Faça uma explicação didática e detalhada desta matéria focando em preparar o aluno para uma prova. Seja claro e estruturado.";
+    } 
+    else if (acao === 'quiz_generator') {
+      const count = document.getElementById('ia-quiz-count').value || 5;
+      const level = document.getElementById('ia-quiz-level').value;
+
+      prompt = "Aja como um professor especialista elaborando uma prova. Baseando-se APENAS no documento fornecido, crie " + count + " questões de múltipla escolha inéditas de nível: " + level.toUpperCase() + ". " +
+               "RETORNO OBRIGATÓRIO (JSON PURO): { \"titulo\": \"Simulado\", \"questoes\": [ { \"enunciado\": \"...\", \"opcoes\": [\"A\", \"B\", \"C\", \"D\", \"E\"], \"indice_correto\": 1, \"explicacao\": \"...\" } ] } " +
+               "Nota: 'indice_correto' é um número inteiro indicando a posição da resposta certa no array (0 a 4). Não retorne NADA além do JSON.";
+    }
+    else if (acao === 'mindmap') {
+      const level = document.getElementById('ia-mindmap-level').value || 'detalhado';
+      prompt = "Aja como um especialista na criação de mapas mentais para retenção de conhecimento. Crie um diagrama Mermaid baseado na estrutura deste documento. Nível: " + level.toUpperCase() + ". " +
+               "Regras CRÍTICAS: Use APENAS graph TD. Proteja SEMPRE o texto dos nós com aspas duplas (Ex: id1[\"Texto do Nó\"]). Não use caracteres especiais como & ou %. O retorno deve ser APENAS o código Mermaid puro, sem formatação markdown em volta se possível.";
+    }
+    // Adicione este bloco Else If logo abaixo do 'mindmap'
+    else if (acao === 'flashcards') {
+      const count = document.getElementById('ia-cards-count').value || 10;
+      prompt = "Aja como um especialista em técnicas de memorização por repetição espaçada. Baseando-se APENAS no documento fornecido, crie " + count + " flashcards contendo perguntas curtas e respostas diretas. " +
+               "RETORNO OBRIGATÓRIO (JSON PURO): [ { \"frente\": \"Pergunta curta e direta?\", \"verso\": \"Resposta clara e baseada no texto.\" } ] " +
+               "Não retorne absolutamente nada além do JSON em formato de Array.";
+    }
+
+    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=" + apiKey, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt + "\n\nMATERIAL DE ESTUDO:\n" + rawText }] }],
+        generationConfig: { temperature: 0.2 }
+      })
+    });
+
+    const data = await response.json();
+    if (data.error) throw new Error(data.error.message);
+    const finalContent = data.candidates[0].content.parts[0].text;
+    
+    // No final da função executarIA, ajuste a entrega:
+    if (acao === 'quiz_generator') {
+        const jsonString = finalContent.replace(/```json/g, '').replace(/```/g, '').trim();
+        const quizData = JSON.parse(jsonString);
+        if (typeof abrirModalQuizInterativo === 'function') abrirModalQuizInterativo(quizData);
+    } else if (acao === 'flashcards') {
+        // Por agora, mostraremos como texto puro estruturado. Na próxima versão criaremos o modal de estudo de Flashcards!
+        const jsonString = finalContent.replace(/```json/g, '').replace(/```/g, '').trim();
+        const cardsData = JSON.parse(jsonString);
+        let htmlCards = "### Os teus Cartões de Memorização 📇\n\n";
+        cardsData.forEach((c, i) => {
+           htmlCards += `**Cartão ${i+1}:** ${c.frente}\n*Resposta:* ${c.verso}\n\n---\n\n`;
+        });
+        if (typeof abrirModalResultadoIA === 'function') abrirModalResultadoIA('Baralho Gerado', htmlCards);
+    } else {
+        let modalTitle = acao === 'summarize' ? 'Resumo da Matéria' : 'Mapa Mental Visual';
+        if (typeof abrirModalResultadoIA === 'function') abrirModalResultadoIA(modalTitle, finalContent);
+    }
+
+  } catch (error) {
+    console.error("Erro na resposta da IA:", error);
+    if (typeof showToast === 'function') showToast(error.message, "error");
+  } finally {
+    if (typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
+  }
+}
+</script>
