@@ -1,0 +1,439 @@
+<script>
+/* ==========================================================================
+   MÓDULO 16: MOTOR DE GAMIFICAÇÃO, AGENDA E JORNADAS (js_gamificacao.html)
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   VARIÁVEIS GLOBAIS
+   -------------------------------------------------------------------------- */
+let globalXP = 0;
+let globalLevel = 1;
+const XP_POR_NIVEL = 100;
+let minhasJornadas = []; // Guarda os dados reais vindos da Base de Dados
+
+/* --------------------------------------------------------------------------
+   INICIALIZAÇÃO (BOOT DO MÓDULO)
+   -------------------------------------------------------------------------- */
+document.addEventListener('DOMContentLoaded', () => {
+    const email = localStorage.getItem('usuario_email');
+    if (!email) {
+        // Sem email logado, renderiza apenas o estado vazio após um breve delay
+        setTimeout(renderizarGridJornadas, 1500);
+        return;
+    }
+
+    // 1. Vai buscar os XP reais ao servidor ao entrar
+    google.script.run.withSuccessHandler((resp) => {
+        if (resp.success) {
+            globalXP = resp.xp;
+            globalLevel = resp.level;
+            atualizarBarrasXP();
+        }
+    }).carregarGamificacao(email);
+
+    // 2. Dá tempo ao sistema para carregar o resto e busca as Jornadas na BD
+    setTimeout(carregarJornadasAtivas, 1500); 
+});
+
+/* --------------------------------------------------------------------------
+   LÓGICA DE GAMIFICAÇÃO (VAQUINHA E XP)
+   -------------------------------------------------------------------------- */
+function ganharXP(pontosGanhos, eventClick = null) {
+    globalXP += pontosGanhos;
+    let subiuNivel = false;
+
+    while (globalXP >= (globalLevel * XP_POR_NIVEL)) {
+        globalXP -= (globalLevel * XP_POR_NIVEL);
+        globalLevel++;
+        subiuNivel = true;
+    }
+
+    atualizarBarrasXP();
+    
+    // Sincroniza com o servidor
+    const email = localStorage.getItem('usuario_email');
+    if (email) {
+        google.script.run.sincronizarGamificacao(email, globalXP, globalLevel);
+    }
+    
+    if (subiuNivel) {
+        if (typeof showToast === 'function') showToast(`🎉 LEVEL UP! Subiste para o Nível ${globalLevel}!`, "success");
+        animarVaquinhaLevelUp();
+    }
+    
+    if (eventClick) {
+        criarPopupXP(eventClick.clientX, eventClick.clientY, pontosGanhos);
+    }
+}
+
+// Atualiza o DOM com os valores corretos
+function atualizarBarrasXP() {
+    const maxXpAtual = globalLevel * XP_POR_NIVEL;
+    const percentagem = Math.min((globalXP / maxXpAtual) * 100, 100);
+
+    // Atualiza o Header
+    const headerText = document.getElementById('global-xp-text');
+    const headerBar = document.getElementById('global-xp-bar');
+    const headerLevel = document.getElementById('global-level-text');
+    
+    if(headerText) headerText.innerText = `${globalXP} / ${maxXpAtual} XP`;
+    if(headerBar) headerBar.style.width = `${percentagem}%`;
+    if(headerLevel) headerLevel.innerText = globalLevel;
+
+    // Atualiza a View da Agenda
+    const painelLevel = document.getElementById('painel-level');
+    const painelBar = document.getElementById('painel-xp-bar');
+    const painelRank = document.getElementById('painel-rank');
+
+    if(painelLevel) painelLevel.innerText = globalLevel;
+    if(painelBar) painelBar.style.width = `${percentagem}%`;
+    
+    // Ranks Baseados no Nível
+    if(painelRank) {
+        if(globalLevel < 5) painelRank.innerText = "Vaquinha Estudante 🎒";
+        else if(globalLevel < 10) painelRank.innerText = "Vaquinha Focada 👓";
+        else painelRank.innerText = "Vaquinha Mestre 🎓";
+    }
+}
+
+// Efeito de números subindo no cursor do mouse
+function criarPopupXP(x, y, pontos) {
+    const pop = document.createElement('div');
+    pop.className = 'xp-popup';
+    pop.innerText = `+${pontos} XP`;
+    pop.style.left = `${x}px`;
+    pop.style.top = `${y}px`;
+    document.body.appendChild(pop);
+    setTimeout(() => pop.remove(), 1500);
+}
+
+function animarVaquinhaLevelUp() {
+    const avatar1 = document.getElementById('vaquinha-avatar-header');
+    const avatar2 = document.getElementById('vaquinha-big-avatar');
+    if(avatar1) { avatar1.classList.remove('cow-level-up'); void avatar1.offsetWidth; avatar1.classList.add('cow-level-up'); }
+    if(avatar2) { avatar2.classList.remove('cow-level-up'); void avatar2.offsetWidth; avatar2.classList.add('cow-level-up'); }
+}
+
+/* --------------------------------------------------------------------------
+   LÓGICA DE VINCULAÇÃO (MESA -> JORNADA)
+   -------------------------------------------------------------------------- */
+const materiasAtivasMock = ["Engenharia de Software", "Banco de Dados", "Segurança da Informação"];
+
+function abrirModalVincularJornada() {
+    if (typeof pdfState === 'undefined' || !pdfState || pdfState.length === 0) {
+        if (typeof showToast === 'function') showToast("A Mesa de Estudos está vazia. Adicione material primeiro.", "warning");
+        return;
+    }
+
+    const select = document.getElementById('select-materia-vincular');
+    if (select) {
+        select.innerHTML = '';
+        materiasAtivasMock.forEach(m => {
+            select.innerHTML += `<option value="${m}">${m}</option>`;
+        });
+    }
+
+    const modalEl = document.getElementById('modalVincularJornada');
+    if (modalEl) {
+        const bsModal = new bootstrap.Modal(modalEl);
+        bsModal.show();
+    }
+}
+
+function confirmarVinculoJornada(event) {
+    const select = document.getElementById('select-materia-vincular');
+    const materia = select ? select.value : 'Geral';
+    
+    // Aqui no futuro enviaria o pdfState para o Backend
+    
+    const modalEl = document.getElementById('modalVincularJornada');
+    if (modalEl) {
+        try { bootstrap.Modal.getInstance(modalEl).hide(); } catch(e) {}
+    }
+
+    if (typeof showToast === 'function') showToast(`Materiais arquivados no Cofre de '${materia}'.`, "success");
+    
+    // Recompensa o aluno por se organizar!
+    ganharXP(15, event || { clientX: window.innerWidth/2, clientY: window.innerHeight/2 });
+}
+
+/* --------------------------------------------------------------------------
+   GERADOR DA AGENDA INTELIGENTE E TAREFAS
+   -------------------------------------------------------------------------- */
+function gerarTarefasDaAgendaMock() {
+    const container = document.getElementById('agenda-tasks-container');
+    if(!container) return;
+
+    // Simulação do resultado do cruzamento: JSON da IA vs Data da Prova
+    const tarefas = [
+        { id: 'task-1', tempo: '2h', materia: 'Engenharia de Software', topico: 'Padrões de Projeto (MVC, Singleton)', xp: 50 },
+        { id: 'task-2', tempo: '1h', materia: 'Banco de Dados', topico: 'Revisão: Normalização (1FN a 3FN)', xp: 30 },
+        { id: 'task-3', tempo: '30m', materia: 'Simulado IA', topico: 'Fazer 15 questões de Segurança', xp: 20 }
+    ];
+
+    container.innerHTML = tarefas.map(t => `
+        <div class="card border border-primary-subtle shadow-sm rounded-4 p-3 d-flex flex-row align-items-center justify-content-between mb-3 bg-white" id="${t.id}">
+            <div class="d-flex align-items-center gap-3">
+               <div class="bg-primary-subtle text-primary rounded-circle d-flex align-items-center justify-content-center fw-bold border border-primary" style="width: 50px; height: 50px;">
+                 ${t.tempo}
+               </div>
+               <div>
+                 <h5 class="fw-bold mb-1 text-dark">${t.materia}</h5>
+                 <span class="text-muted small"><i class="material-icons align-middle text-secondary" style="font-size: 14px;">flag</i> Tópico: ${t.topico}</span>
+               </div>
+            </div>
+            <button class="btn btn-success rounded-pill px-4 fw-bold shadow-sm d-flex align-items-center gap-1" onclick="concluirTarefaAgenda('${t.id}', ${t.xp}, event)">
+               <i class="material-icons fs-6">check_circle</i> Concluir
+            </button>
+        </div>
+    `).join('');
+}
+
+window.concluirTarefaAgenda = function(taskId, xpReward, event) {
+    const taskCard = document.getElementById(taskId);
+    if (!taskCard || taskCard.classList.contains('task-card-done')) return; // Já foi concluída
+
+    // Altera o visual do Card
+    taskCard.classList.add('task-card-done');
+    const btn = taskCard.querySelector('button');
+    if (btn) {
+        btn.disabled = true;
+        btn.classList.replace('btn-success', 'btn-outline-success');
+        btn.innerHTML = '<i class="material-icons fs-6">done_all</i> Feito!';
+    }
+
+    // Dispara o motor de Gamificação
+    ganharXP(xpReward, event);
+};
+
+/* --------------------------------------------------------------------------
+   MOTOR DE JORNADAS (VISUALIZAÇÃO, CRIAÇÃO MANUAL E GESTÃO)
+   -------------------------------------------------------------------------- */
+
+// 1. CARREGAR JORNADAS DO BACKEND (Silencioso e à prova de falhas)
+function carregarJornadasAtivas() {
+    const email = localStorage.getItem('usuario_email');
+    
+    // Se não há email, tira logo o spinner e mostra o vazio
+    if(!email) {
+        renderizarGridJornadas(); 
+        return;
+    }
+    
+    const grid = document.getElementById('grid-jornadas-ativas');
+    if (grid && (!minhasJornadas || minhasJornadas.length === 0)) {
+        grid.innerHTML = `
+           <div class="col-12 text-center py-5 text-muted border rounded-4 bg-white shadow-sm" style="border-style: dashed !important;">
+             <div class="spinner-border text-primary spinner-border-sm mb-2" role="status"></div>
+             <p class="mb-0 small">A sincronizar com a base de dados...</p>
+           </div>`;
+    }
+
+    google.script.run
+        .withSuccessHandler(resp => {
+            if(resp.success && resp.jornadas) {
+                minhasJornadas = resp.jornadas.map(j => ({ id: j.id, dataCriacao: j.dataCriacao, ...j.dados }));
+            } else {
+                // Em caso de falha no backend, garante que a lista fica vazia (sem mostrar erros no ecrã)
+                minhasJornadas = []; 
+            }
+            // Chama a renderização SEMPRE, para matar o spinner
+            renderizarGridJornadas(); 
+        })
+        .withFailureHandler(err => {
+            console.warn("Ligação à BD falhou. A mostrar estado vazio.", err);
+            minhasJornadas = [];
+            // Chama a renderização SEMPRE, para matar o spinner
+            renderizarGridJornadas(); 
+        })
+        .carregarJornadasBD(email);
+}
+
+// 2. DESENHAR A GRELHA DE JORNADAS
+function renderizarGridJornadas() {
+    const grid = document.getElementById('grid-jornadas-ativas');
+    if(!grid) return;
+    
+    if(!minhasJornadas || minhasJornadas.length === 0) {
+        grid.innerHTML = `
+          <div class="col-12 text-center py-5 text-muted border rounded-4 bg-white shadow-sm" style="border-style: dashed !important;">
+             <i class="material-icons mb-3" style="font-size: 48px; opacity: 0.3;">route</i>
+             <h5 class="fw-bold">Nenhuma jornada ativa.</h5>
+             <p class="mb-0 small">Clique em "Criar Manualmente" ou "Ler Edital com IA" para iniciar a sua organização.</p>
+          </div>`;
+        return;
+    }
+    
+    grid.innerHTML = minhasJornadas.map(j => {
+        const numMaterias = j.materias ? j.materias.length : 0;
+        const totalMateriais = j.materias ? j.materias.reduce((acc, mat) => acc + (mat.materiais ? mat.materiais.length : 0), 0) : 0;
+        
+        let statusRoteiro = j.temRoteiro 
+            ? `<span class="text-success small fw-bold"><i class="material-icons align-middle" style="font-size: 14px;">check_circle</i> Roteiro Ativo</span>`
+            : `<span class="text-warning small fw-bold"><i class="material-icons align-middle" style="font-size: 14px;">pending_actions</i> Sem Roteiro</span>`;
+
+        return `
+        <div class="col-md-6 col-lg-4">
+          <div class="card border-0 shadow-sm rounded-4 p-4 h-100 bg-white transition-hover">
+            <div class="d-flex justify-content-between align-items-start mb-3">
+              <span class="badge bg-primary-subtle text-primary rounded-pill fw-bold">${escapeHtml(j.tipo || 'Geral')}</span>
+              <button class="btn btn-sm btn-light rounded-circle text-muted p-1"><i class="material-icons">more_vert</i></button>
+            </div>
+            <h5 class="fw-bold text-dark mb-2" style="line-height: 1.3;">${escapeHtml(j.titulo || 'Nova Jornada')}</h5>
+            
+            <div class="d-flex flex-wrap gap-3 mt-3 text-muted small">
+              <span title="Matérias Mapeadas"><i class="material-icons align-middle" style="font-size: 16px;">category</i> ${numMaterias}</span>
+              <span title="Materiais no Cofre"><i class="material-icons align-middle" style="font-size: 16px;">folder_zip</i> ${totalMateriais} docs</span>
+            </div>
+            
+            <hr class="opacity-25 my-3">
+            
+            <div class="d-flex justify-content-between align-items-center mt-auto">
+              ${statusRoteiro}
+              <button class="btn btn-outline-dark btn-sm rounded-pill px-3 fw-bold" onclick="abrirGerenciadorJornada('${j.id}')">Gerir Cofre</button>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+}
+
+// 3. AÇÕES DE CRIAÇÃO MANUAL E GESTÃO
+function abrirModalJornadaManual() {
+    const modalEl = document.getElementById('modalJornadaManual');
+    if (!modalEl) return;
+    
+    // Limpa os campos antes de abrir
+    document.getElementById('manual-jornada-nome').value = '';
+    document.getElementById('manual-jornada-materias').value = '';
+    
+    new bootstrap.Modal(modalEl).show();
+}
+
+function salvarJornadaManual() {
+    const email = localStorage.getItem('usuario_email');
+    if(!email) return;
+
+    const nome = document.getElementById('manual-jornada-nome').value.trim();
+    const tipo = document.getElementById('manual-jornada-tipo').value;
+    const nivel = document.getElementById('manual-jornada-nivel').value; // Captura o novo campo
+    const materiasStr = document.getElementById('manual-jornada-materias').value.trim();
+
+    if(!nome || !materiasStr) {
+        if(typeof showToast === 'function') showToast("Preencha o nome e pelo menos uma matéria.", "warning"); 
+        return;
+    }
+
+    const arrayMaterias = materiasStr.split(',')
+        .map(m => m.trim())
+        .filter(m => m.length > 0)
+        .map(m => ({ nome: m, peso: 1, materiais: [] })); // Nas manuais o peso padrão é 1
+
+    const novaJornadaDados = {
+        titulo: nome,
+        tipo: tipo,
+        nivel: nivel, // Incluído aqui!
+        dataProva: '',
+        temRoteiro: false,
+        materias: arrayMaterias
+    };
+
+    if(typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal("A gravar Jornada...");
+
+    // Envia para o Backend
+    google.script.run
+        .withSuccessHandler(resp => {
+            if(typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
+            
+            if (resp.success) {
+                const modalEl = document.getElementById('modalJornadaManual');
+                if (modalEl) {
+                    try { bootstrap.Modal.getInstance(modalEl).hide(); } catch(e){}
+                }
+                
+                carregarJornadasAtivas(); // Pede à BD a lista atualizada
+                if(typeof showToast === 'function') showToast("Jornada criada com sucesso!", "success");
+                
+                // Gamificação: Dá XP pela organização
+                ganharXP(20, {clientX: window.innerWidth/2, clientY: window.innerHeight/2});
+            } else {
+                if(typeof showToast === 'function') showToast("Erro: " + resp.error, "error");
+            }
+        })
+        .withFailureHandler(err => {
+            if(typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
+            if(typeof showToast === 'function') showToast("Falha de comunicação com o servidor.", "error");
+        })
+        .salvarJornadaBD(email, novaJornadaDados);
+}
+
+function abrirGerenciadorJornada(id) {
+    const jornada = minhasJornadas.find(j => j.id === id);
+    if(!jornada) return;
+
+    document.getElementById('painel-jor-nome').innerText = jornada.titulo || 'Jornada';
+    document.getElementById('painel-jor-tipo').innerText = jornada.tipo || 'Geral';
+
+    // Constrói a lista do cofre lendo os arrays
+    const lista = document.getElementById('painel-jor-materias-lista');
+    if (jornada.materias && jornada.materias.length > 0) {
+        lista.innerHTML = jornada.materias.map(m => {
+            const qtdMateriais = m.materiais ? m.materiais.length : 0;
+            return `
+            <div class="list-group-item border-0 border-bottom bg-transparent px-2 py-3 d-flex justify-content-between align-items-center">
+                <div>
+                   <h6 class="mb-1 fw-bold text-dark text-truncate" style="max-width: 200px;">${escapeHtml(m.nome)}</h6>
+                   <small class="text-muted">${qtdMateriais} anexos</small>
+                </div>
+                <button class="btn btn-sm btn-light text-primary rounded-circle border p-1" title="Anexar Material a esta matéria"><i class="material-icons" style="font-size: 18px;">upload_file</i></button>
+            </div>
+            `;
+        }).join('');
+    } else {
+        lista.innerHTML = `<p class="text-muted small">Nenhuma matéria registada.</p>`;
+    }
+
+    const modalEl = document.getElementById('modalPainelJornada');
+    if(modalEl) new bootstrap.Modal(modalEl).show();
+}
+
+function gerarRoteiroAgenda() {
+    const data = document.getElementById('painel-jor-data').value;
+    if(!data) { 
+        if(typeof showToast === 'function') showToast("Defina uma data alvo.", "warning"); 
+        return; 
+    }
+    
+    const modalEl = document.getElementById('modalPainelJornada');
+    if (modalEl) {
+        try { bootstrap.Modal.getInstance(modalEl).hide(); } catch(e){}
+    }
+    
+    if(typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal("A processar roteiro inteligente...");
+    
+    // Simula a lógica de geração de blocos de estudo da IA
+    setTimeout(() => {
+        if(typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
+        if(typeof showToast === 'function') showToast("Roteiro gerado na Agenda!", "success");
+        ganharXP(50);
+        
+        // Atualiza status da Jornada visualmente
+        if(minhasJornadas.length > 0) minhasJornadas[0].temRoteiro = true; 
+        renderizarGridJornadas();
+        
+        if(typeof mostrarView === 'function') mostrarView('agenda-view');
+        gerarTarefasDaAgendaMock();
+    }, 2500);
+}
+
+// Helper para prevenir XSS no HTML injetado
+if (typeof escapeHtml !== 'function') {
+    window.escapeHtml = function(unsafe) {
+        return (unsafe || "").toString()
+             .replace(/&/g, "&amp;")
+             .replace(/</g, "&lt;")
+             .replace(/>/g, "&gt;")
+             .replace(/"/g, "&quot;")
+             .replace(/'/g, "&#039;");
+    };
+}
+</script>
