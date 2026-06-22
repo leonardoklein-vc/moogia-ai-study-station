@@ -1,0 +1,14 @@
+TERMOS DE LICENÇA E USO COMERCIAL — MOOGIA
+
+Copyright (c) 2026 Leonardo Klein Rocha (LéuKlein). Todos os direitos reservados.
+
+Este software e todos os arquivos associados (o "Software") são de propriedade exclusiva de Leonardo Klein Rocha. O acesso ao código-fonte através deste repositório público é concedido estritamente para fins de exibição de portfólio de engenharia e avaliação técnica de competência arquitetônica.
+
+FICA EXPRESSAMENTE PROIBIDO:
+1. Copiar, modificar, duplicar, reproduzir ou criar obras derivadas deste Software, seja no todo ou em parte.
+2. Distribuir, sublicenciar, alugar, vender ou comercializar o Software ou qualquer componente derivado dele.
+3. Utilizar o Software ou sua lógica arquitetônica para fins comerciais ou privados sem a autorização prévia, expressa e por escrito do detentor dos direitos autorais.
+
+A infração de qualquer um dos termos acima constituirá violação de direitos autorais e propriedade intelectual, sujeitando o infrator às sanções civis e criminais previstas na legislação vigente de proteção de software e direitos autorais.
+
+Este código é disponibilizado "no estado em que se encontra" (AS IS), sem garantias de qualquer tipo, expressas ou implícitas, quanto à sua adequação a fins específicos ou ausência de erros.
