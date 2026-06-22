@@ -1,7 +1,40 @@
 <script>
 /* ==========================================================================
-   ESTAÇÃO DE ESTUDOS IA - COMUNICAÇÃO COM API GEMINI (js_ia_api.html)
+   ESTAÇÃO DE ESTUDOS IA - COMUNICAÇÃO API E ACERVO CLOUD (js_ia_api.html)
    ========================================================================== */
+
+window.acervoIA_Cache = [];
+
+window.carregarAcervoGlobal = function() {
+    const email = localStorage.getItem('usuario_email');
+    if(!email) return;
+
+    google.script.run.withSuccessHandler(resp => {
+        if(resp.success) {
+            window.acervoIA_Cache = resp.itens;
+            
+            if(typeof window.renderizarQuizzesSalvos === 'function') window.renderizarQuizzesSalvos();
+            if(typeof window.renderizarResumosSalvos === 'function') window.renderizarResumosSalvos();
+            if(typeof window.renderizarMapasSalvos === 'function') window.renderizarMapasSalvos();
+            if(typeof window.renderizarCartoesSalvos === 'function') window.renderizarCartoesSalvos();
+            
+            // NOVO: Atualiza a Dashboard automaticamente sempre que a Nuvem sincroniza
+            if(typeof window.renderizarMateriaisRecentesDashboard === 'function') window.renderizarMateriaisRecentesDashboard();
+        }
+    }).carregarAcervoIABanco(email);
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(window.carregarAcervoGlobal, 1000);
+});
+
+// Captura de Contexto Gamificado (Jornada/Módulo/Matéria)
+function obterContextoEstudoAtual() {
+    let jornada = localStorage.getItem('jornada_ativa_nome') || document.getElementById('titulo-jornada-ativa')?.innerText || 'Estudo Independente';
+    let modulo = localStorage.getItem('modulo_ativo_nome') || 'Módulo Geral';
+    let materia = localStorage.getItem('materia_ativa_nome') || 'Matéria Não Especificada';
+    return { jornada, modulo, materia };
+}
 
 async function extrairTextoDasPaginasSelecionadas() {
   const selectedPages = pdfState.filter(function(p) { return p.selected; });
@@ -17,12 +50,11 @@ async function extrairTextoDasPaginasSelecionadas() {
     if (pDef.isBlank) continue;
 
     let pageText = "";
-
     if (pDef.extractedText) {
       pageText = pDef.extractedText;
     } else {
       const arrayBuffer = sourcePdfs[pDef.sourceFileId];
-      if (!window['pdfjs-dist/build/pdf']) throw new Error("Motor de leitura de documentos não carregado.");
+      if (!window['pdfjs-dist/build/pdf']) throw new Error("Motor de leitura não carregado.");
 
       const pdf = await pdfjsLib.getDocument({
         data: new Uint8Array(arrayBuffer),
@@ -43,24 +75,20 @@ async function extrairTextoDasPaginasSelecionadas() {
     }
   }
   
-  if (!encontrouTextoReal) {
-    throw new Error("Nenhum texto encontrado. Se o material for uma imagem ou scan, use primeiro a ferramenta 'Scanner (Extrair Texto)' na Estação.");
-  }
-  
+  if (!encontrouTextoReal) throw new Error("Nenhum texto legível encontrado.");
   return extractedText;
 }
 
+/* --- MOTORES DE INTELIGÊNCIA ARTIFICIAL (GEMINI API) --- */
 async function executarIA(acao) {
   const apiKey = localStorage.getItem('gemini_api_key');
   
-  // ATUALIZAÇÃO CRÍTICA: Agora chama o novo Modal de Configurações Global
   if (!apiKey) {
     if (typeof showToast === 'function') showToast("Configure a chave do motor de IA primeiro.", "warning");
     const modalEl = document.getElementById('modalConfiguracoes');
     if (modalEl && typeof bootstrap !== 'undefined') {
        const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
        bsModal.show();
-       // Alterna automaticamente para a aba de API
        const tabApi = document.querySelector('[data-bs-target="#config-api"]');
        if(tabApi) tabApi.click();
     }
@@ -69,35 +97,71 @@ async function executarIA(acao) {
 
   try {
     const rawText = await extrairTextoDasPaginasSelecionadas();
-    if (typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal("O Motor de IA está a analisar o material...");
+    if (typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal("A processar e fundir conhecimentos na IA...");
 
     let prompt = "";
     
     if (acao === 'summarize') {
-      const sumType = document.getElementById('ia-sum-type').value;
+      const sumType = document.getElementById('ia-sum-type') ? document.getElementById('ia-sum-type').value : 'executive';
       if (sumType === 'bullet') prompt = "Faça um resumo em tópicos (bullet points) dos conceitos principais deste material de estudo.";
       else if (sumType === 'executive') prompt = "Faça um resumo executivo muito conciso e direto deste material.";
       else prompt = "Aja como um professor particular experiente. Faça uma explicação didática e detalhada desta matéria focando em preparar o aluno para uma prova. Seja claro e estruturado.";
     } 
     else if (acao === 'quiz_generator') {
-      const count = document.getElementById('ia-quiz-count').value || 5;
-      const level = document.getElementById('ia-quiz-level').value;
+      const count = document.getElementById('ia-quiz-count') ? document.getElementById('ia-quiz-count').value : 5;
+      const level = document.getElementById('ia-quiz-level') ? document.getElementById('ia-quiz-level').value : 'médio';
+      
+      const checkedStylesElements = document.querySelectorAll('.quiz-style-check:checked');
+      let selectedStyles = Array.from(checkedStylesElements).map(cb => cb.value);
+      if (selectedStyles.length === 0) selectedStyles = ['mix'];
 
-      prompt = "Aja como um professor especialista elaborando uma prova. Baseando-se APENAS no documento fornecido, crie " + count + " questões de múltipla escolha inéditas de nível: " + level.toUpperCase() + ". " +
-               "RETORNO OBRIGATÓRIO (JSON PURO): { \"titulo\": \"Simulado\", \"questoes\": [ { \"enunciado\": \"...\", \"opcoes\": [\"A\", \"B\", \"C\", \"D\", \"E\"], \"indice_correto\": 1, \"explicacao\": \"...\" } ] } " +
-               "Nota: 'indice_correto' é um número inteiro indicando a posição da resposta certa no array (0 a 4). Não retorne NADA além do JSON.";
+      const bankDeModelos = {
+        "1": "1. Julgamento Único (Estilo Cebraspe/Cespe)\nAvaliar ( ) Certo / ( ) Errado.",
+        "2": "2. Múltipla Escolha Direta (Apenas uma correta)\nAlternativas A a E.",
+        "3": "3. Múltipla Escolha de Exceção\nAchar a INCORRETA (Exceto).",
+        "4": "4. Análise de Afirmações\nJulgar (I, II, III) e escolher a combinação.",
+        "5": "5. Sequência Lógica\nAvaliar (V) ou (F) e assinalar a sequência.",
+        "8": "8. Asserção e Razão (Enade)\nAvaliar sentenças conectadas por PORQUE.",
+        "9": "9. Somatória (Estilo UFPR/UFSC)\nGabarito é a soma."
+      };
+
+      let regrasModelo = selectedStyles.includes('mix') 
+        ? "Varie os seguintes modelos:\n" + Object.values(bankDeModelos).join("\n") 
+        : "Siga estritamente:\n" + selectedStyles.map(id => bankDeModelos[id]).join("\n");
+
+      prompt = `Atue como um examinador de bancas. Crie ${count} questões de nível: ${level.toUpperCase()}.
+ARQUITETURA(S) DA QUESTÃO:
+${regrasModelo}
+
+RETORNO OBRIGATÓRIO (CRÍTICO): Retorne ESTRITAMENTE um JSON:
+{
+  "titulo": "Simulado Extraído",
+  "questoes": [
+    {
+      "enunciado": "...",
+      "opcoes": ["Opção A", "Opção B", "Opção C", "Opção D", "Opção E"],
+      "indice_correto": 1, 
+      "explicacao": "..."
+    }
+  ]
+}`;
     }
     else if (acao === 'mindmap') {
-      const level = document.getElementById('ia-mindmap-level').value || 'detalhado';
-      prompt = "Aja como um especialista na criação de mapas mentais para retenção de conhecimento. Crie um diagrama Mermaid baseado na estrutura deste documento. Nível: " + level.toUpperCase() + ". " +
-               "Regras CRÍTICAS: Use APENAS graph TD. Proteja SEMPRE o texto dos nós com aspas duplas (Ex: id1[\"Texto do Nó\"]). Não use caracteres especiais como & ou %. O retorno deve ser APENAS o código Mermaid puro, sem formatação markdown em volta se possível.";
+      const level = document.getElementById('ia-mindmap-level') ? document.getElementById('ia-mindmap-level').value : 'detalhado';
+      const layout = document.getElementById('ia-mindmap-layout') ? document.getElementById('ia-mindmap-layout').value : 'TD';
+      // CORREÇÃO: Pedimos explicitamente o bloco markdown
+      prompt = "Crie um diagrama Mermaid baseado no documento. Nível: " + level.toUpperCase() + ".\n" +
+               "REGRAS: 1. Use 'graph " + layout + "'. 2. Texto dos nós em aspas duplas (Ex: id1[\"Texto\"]). Retorne o código ESTRITAMENTE dentro de um bloco markdown ```mermaid ... ```.";
     }
-    // Adicione este bloco Else If logo abaixo do 'mindmap'
     else if (acao === 'flashcards') {
-      const count = document.getElementById('ia-cards-count').value || 10;
-      prompt = "Aja como um especialista em técnicas de memorização por repetição espaçada. Baseando-se APENAS no documento fornecido, crie " + count + " flashcards contendo perguntas curtas e respostas diretas. " +
-               "RETORNO OBRIGATÓRIO (JSON PURO): [ { \"frente\": \"Pergunta curta e direta?\", \"verso\": \"Resposta clara e baseada no texto.\" } ] " +
-               "Não retorne absolutamente nada além do JSON em formato de Array.";
+      const count = document.getElementById('ia-cards-count') ? document.getElementById('ia-cards-count').value : 10;
+      const level = document.getElementById('ia-cards-level') ? document.getElementById('ia-cards-level').value : 'médio';
+      prompt = `Atue como um especialista em neuroaprendizagem. Crie ${count} flashcards (Cartões de Memorização) com profundidade: ${level.toUpperCase()}.
+Eles devem ser baseados EXCLUSIVAMENTE no documento fornecido.
+A "frente" deve ter uma pergunta direta, conceito ou lacuna.
+O "verso" deve ter a resposta exata e uma micro-explicação (se necessário).
+RETORNO OBRIGATÓRIO (JSON PURO, SEM MARKDOWNS): 
+[ { "frente": "Pergunta?", "verso": "Resposta." } ]`;
     }
 
     const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=" + apiKey, {
@@ -113,30 +177,1608 @@ async function executarIA(acao) {
     if (data.error) throw new Error(data.error.message);
     const finalContent = data.candidates[0].content.parts[0].text;
     
-    // No final da função executarIA, ajuste a entrega:
     if (acao === 'quiz_generator') {
         const jsonString = finalContent.replace(/```json/g, '').replace(/```/g, '').trim();
         const quizData = JSON.parse(jsonString);
-        if (typeof abrirModalQuizInterativo === 'function') abrirModalQuizInterativo(quizData);
+        if (typeof window.abrirModalQuizInterativo === 'function') window.abrirModalQuizInterativo(quizData);
+        if (typeof dispararAcaoGamificacao === 'function') dispararAcaoGamificacao('gerar_quiz');
     } else if (acao === 'flashcards') {
-        // Por agora, mostraremos como texto puro estruturado. Na próxima versão criaremos o modal de estudo de Flashcards!
         const jsonString = finalContent.replace(/```json/g, '').replace(/```/g, '').trim();
         const cardsData = JSON.parse(jsonString);
-        let htmlCards = "### Os teus Cartões de Memorização 📇\n\n";
-        cardsData.forEach((c, i) => {
-           htmlCards += `**Cartão ${i+1}:** ${c.frente}\n*Resposta:* ${c.verso}\n\n---\n\n`;
-        });
-        if (typeof abrirModalResultadoIA === 'function') abrirModalResultadoIA('Baralho Gerado', htmlCards);
+        
+        // CORREÇÃO: Carimba o contexto imediatamente na criação do objeto!
+        const baralho = { 
+            titulo: 'Baralho de Memorização', 
+            cartoes: cardsData,
+            contexto: obterContextoEstudoAtual() 
+        };
+        
+        if (typeof window.abrirModalFlashcardsInterativo === 'function') window.abrirModalFlashcardsInterativo(baralho);
+        if (typeof dispararAcaoGamificacao === 'function') dispararAcaoGamificacao('gerar_flashcards');
     } else {
         let modalTitle = acao === 'summarize' ? 'Resumo da Matéria' : 'Mapa Mental Visual';
-        if (typeof abrirModalResultadoIA === 'function') abrirModalResultadoIA(modalTitle, finalContent);
+        let conteudoRender = finalContent;
+        
+        // BLINDAGEM: Se for Mapa Mental e a IA esquecer as crases do markdown, nós injetamos!
+        if (acao === 'mindmap' && !conteudoRender.includes('```mermaid')) {
+            conteudoRender = "```mermaid\n" + conteudoRender.replace(/```/g, '').trim() + "\n```";
+        }
+
+        if (typeof window.abrirModalResultadoIA === 'function') window.abrirModalResultadoIA(modalTitle, conteudoRender, acao, null);
+        if (typeof dispararAcaoGamificacao === 'function') dispararAcaoGamificacao('gerar_' + acao);
     }
 
   } catch (error) {
     console.error("Erro na resposta da IA:", error);
-    if (typeof showToast === 'function') showToast(error.message, "error");
+    // 🐮 A NOSSA VAQUINHA EMPÁTICA ENTRA EM AÇÃO AQUI:
+    if (typeof window.exibirErroAmigavelIA === 'function') {
+        window.exibirErroAmigavelIA(error);
+    } else {
+        if (typeof showToast === 'function') showToast(error.message, "error");
+    }
   } finally {
     if (typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
   }
 }
+
+/* ==========================================================================
+   MÓDULO DE GRAVAÇÃO NA NUVEM (GENÉRICO & QUIZZES) COM CONTEXTO
+   ========================================================================== */
+
+window.resultadoIAAtual = null; 
+
+window.salvarResultadoGenericoNoBanco = function() {
+    if (!window.resultadoIAAtual || window.resultadoIAAtual.idCloud) return; 
+    const email = localStorage.getItem('usuario_email');
+    if (!email) { alert("Faz o login para usar o acervo cloud."); return; }
+
+    const id = 'mat-' + Date.now();
+    window.resultadoIAAtual.contexto = obterContextoEstudoAtual(); 
+
+    if(typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal("A enviar para a Nuvem...");
+
+    google.script.run.withSuccessHandler(resp => {
+        if(typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
+        if(resp.success) {
+            const modalResult = document.getElementById('modal-ia-resultado');
+            if (modalResult) modalResult.style.display = 'none';
+
+            if(typeof showToast === 'function') showToast("Material salvo com sucesso no seu Acervo!", "success");
+            window.carregarAcervoGlobal(); 
+        } else {
+            alert("Erro da Nuvem: " + resp.error);
+        }
+    }).salvarMaterialIABanco(email, id, window.resultadoIAAtual.tipo, window.resultadoIAAtual.titulo, window.resultadoIAAtual);
+};
+
+window.salvarQuizNoBanco = function(isUpdate = false) {
+    if (!window.quizDataAtual) return;
+    const email = localStorage.getItem('usuario_email');
+    if (!email) { alert("Faz o login para usar o acervo cloud."); return; }
+
+    const id = window.quizDataAtual.idCloud || ('quiz-' + Date.now());
+    window.quizDataAtual.idCloud = id;
+    if (!isUpdate) window.quizDataAtual.contexto = obterContextoEstudoAtual(); 
+
+    if (!isUpdate && typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal("A arquivar Simulado...");
+
+    const gravarFisicamente = function() {
+        google.script.run.withSuccessHandler(resp => {
+            if(typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
+            if(resp.success) {
+                if (!isUpdate) {
+                    const modalQuiz = document.getElementById('modal-ia-quiz');
+                    if (modalQuiz) modalQuiz.remove(); 
+                    if(typeof showToast === 'function') showToast("Simulado guardado no seu banco da nuvem!", "success");
+                } else {
+                    if(typeof showToast === 'function') showToast("Histórico de tentativas atualizado na Nuvem!", "success");
+                }
+                if(typeof dispararAcaoGamificacao === 'function' && !isUpdate) dispararAcaoGamificacao('salvar_quiz_gerado');
+                window.carregarAcervoGlobal();
+            } else {
+                alert("Erro da Nuvem: " + resp.error);
+            }
+        }).salvarMaterialIABanco(email, id, 'quiz_generator', window.quizDataAtual.titulo, window.quizDataAtual);
+    };
+
+    if (isUpdate) {
+        google.script.run.withSuccessHandler(() => { gravarFisicamente(); }).excluirMaterialIABanco(email, id);
+    } else {
+        gravarFisicamente();
+    }
+};
+
+window.deletarItemAcervo = function(idItem) {
+    window.confirmarAcao(
+        "Apagar do Acervo?", 
+        "Atenção! Tem a certeza de que deseja apagar este material da nuvem permanentemente?", 
+        "Sim, apagar", 
+        () => {
+            const email = localStorage.getItem('usuario_email');
+            if(typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal("A apagar ficheiro...");
+            
+            google.script.run.withSuccessHandler(resp => {
+                if(typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
+                if(resp.success) {
+                    if(typeof showToast === 'function') showToast("Item apagado da Nuvem.", "info");
+                    window.carregarAcervoGlobal();
+                } else {
+                    if (typeof showToast === 'function') showToast("Erro: " + resp.error, "error");
+                }
+            }).excluirMaterialIABanco(email, idItem);
+        }
+    );
+};
+
+/* ==========================================================================
+   ACERVO UI ENGINE (GRID/LISTA, PESQUISA, PAGINAÇÃO E BATCH ACTIONS)
+   ========================================================================== */
+
+window.AcervoUI = {
+    state: {}, 
+
+    init: function(tipo, containerId, badgeLabel, iconName, acaoClickHtml) {
+        if (!this.state[tipo]) {
+            const savedView = localStorage.getItem('acervo_view_pref') || 'grid';
+            this.state[tipo] = { view: savedView, page: 1, perPage: 6, search: '', sort: 'date_desc', selected: [] };
+        }
+        this.render(tipo, containerId, badgeLabel, iconName, acaoClickHtml);
+    },
+
+    render: function(tipo, containerId, badgeLabel, iconName, acaoClickHtml) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+
+        const allItems = window.acervoIA_Cache.filter(item => item.tipo === tipo);
+        const st = this.state[tipo];
+
+        let filteredItems = allItems.filter(item => {
+            const termo = st.search.toLowerCase();
+            return item.titulo.toLowerCase().includes(termo) || 
+                   (item.dados && item.dados.contexto && item.dados.contexto.jornada.toLowerCase().includes(termo)) ||
+                   (item.dados && item.dados.contexto && item.dados.contexto.materia.toLowerCase().includes(termo));
+        });
+
+        filteredItems.sort((a, b) => {
+            if (st.sort === 'date_desc') return new Date(b.data.split('/').reverse().join('-')) - new Date(a.data.split('/').reverse().join('-'));
+            if (st.sort === 'date_asc') return new Date(a.data.split('/').reverse().join('-')) - new Date(b.data.split('/').reverse().join('-'));
+            if (st.sort === 'alpha_asc') return a.titulo.localeCompare(b.titulo);
+            if (st.sort === 'alpha_desc') return b.titulo.localeCompare(a.titulo);
+            return 0;
+        });
+
+        const totalPages = Math.ceil(filteredItems.length / st.perPage) || 1;
+        if (st.page > totalPages) st.page = totalPages;
+        const startIndex = (st.page - 1) * st.perPage;
+        const paginatedItems = filteredItems.slice(startIndex, startIndex + st.perPage);
+
+        let html = `
+        <div class="bg-white p-3 rounded-4 shadow-sm border border-light mb-4">
+            <div class="d-flex flex-wrap gap-3 justify-content-between align-items-center">
+                
+                <div class="d-flex gap-2 align-items-center bg-light rounded-pill px-3 py-1 flex-grow-1" style="max-width: 400px; border: 1px solid var(--border-color);">
+                    <i class="material-icons text-muted">search</i>
+                    <input type="text" class="form-control border-0 bg-transparent shadow-none" placeholder="Pesquisar por título ou jornada..." value="${st.search}" oninput="AcervoUI.updateSearch('${tipo}', '${containerId}', '${badgeLabel}', '${iconName}', '${acaoClickHtml}', this.value)">
+                </div>
+
+                <div class="d-flex gap-2 align-items-center flex-wrap">
+                    ${st.selected.length > 0 ? `
+                        <button class="btn btn-danger btn-sm fw-bold d-flex align-items-center gap-1 rounded-pill px-3 shadow-sm pulse-btn-add" onclick="AcervoUI.batchDelete('${tipo}')">
+                            <i class="material-icons" style="font-size: 16px;">delete_sweep</i> Excluir (${st.selected.length})
+                        </button>
+                        <div class="vr mx-1 opacity-25"></div>
+                    ` : ''}
+                    
+                    <select class="form-select form-select-sm border shadow-sm rounded-pill px-3" style="width: 170px;" onchange="AcervoUI.updateSort('${tipo}', '${containerId}', '${badgeLabel}', '${iconName}', '${acaoClickHtml}', this.value)">
+                        <option value="date_desc" ${st.sort === 'date_desc' ? 'selected' : ''}>Mais Recentes</option>
+                        <option value="date_asc" ${st.sort === 'date_asc' ? 'selected' : ''}>Mais Antigos</option>
+                        <option value="alpha_asc" ${st.sort === 'alpha_asc' ? 'selected' : ''}>Alfabética (A-Z)</option>
+                        <option value="alpha_desc" ${st.sort === 'alpha_desc' ? 'selected' : ''}>Alfabética (Z-A)</option>
+                    </select>
+                    
+                    <div class="btn-group shadow-sm rounded-pill border bg-white p-1">
+                        <button class="btn btn-sm rounded-pill border-0 px-2 ${st.view === 'grid' ? 'btn-primary' : 'btn-light text-muted'}" onclick="AcervoUI.updateView('${tipo}', '${containerId}', '${badgeLabel}', '${iconName}', '${acaoClickHtml}', 'grid')" title="Visualização em Cards">
+                            <i class="material-icons" style="font-size: 18px;">grid_view</i>
+                        </button>
+                        <button class="btn btn-sm rounded-pill border-0 px-2 ${st.view === 'list' ? 'btn-primary' : 'btn-light text-muted'}" onclick="AcervoUI.updateView('${tipo}', '${containerId}', '${badgeLabel}', '${iconName}', '${acaoClickHtml}', 'list')" title="Visualização em Lista">
+                            <i class="material-icons" style="font-size: 18px;">view_list</i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        `;
+
+        if (paginatedItems.length === 0) {
+            html += `
+            <div class="col-12 text-center py-5 text-muted border rounded-4 bg-white shadow-sm" style="border-style: dashed !important;">
+              <i class="material-icons mb-3" style="font-size: 48px; opacity: 0.3;">folder_open</i>
+              <h5 class="fw-bold">Nenhum item encontrado.</h5>
+              <p class="mb-0 small">Ajuste os filtros ou crie novos materiais na Estação.</p>
+            </div>`;
+            container.innerHTML = html;
+            return;
+        }
+
+        if (st.view === 'grid') {
+            html += `<div class="row g-4 mb-4">`;
+            paginatedItems.forEach(item => {
+                const ctx = item.dados.contexto || { jornada: 'Estudo Livre', materia: '-' };
+                const isSelected = st.selected.includes(item.id);
+                html += `
+                <div class="col-md-6 col-lg-4">
+                    <div class="card border-0 shadow-sm rounded-4 p-4 h-100 bg-white transition-hover d-flex flex-column position-relative ${isSelected ? 'border-primary' : ''}" style="${isSelected ? 'box-shadow: 0 0 0 2px var(--primary) !important;' : ''}">
+                        
+                        <div class="position-absolute top-0 start-0 m-3 z-2">
+                            <input class="form-check-input shadow-sm" type="checkbox" style="width: 20px; height: 20px; cursor: pointer;" ${isSelected ? 'checked' : ''} onchange="AcervoUI.toggleSelect('${tipo}', '${containerId}', '${badgeLabel}', '${iconName}', '${acaoClickHtml}', '${item.id}')">
+                        </div>
+
+                        <div class="d-flex justify-content-end align-items-start mb-3 ms-4">
+                            <span class="badge bg-primary-subtle text-primary rounded-pill fw-bold d-flex align-items-center gap-1"><i class="material-icons" style="font-size: 14px;">${iconName}</i> ${badgeLabel}</span>
+                        </div>
+                        
+                        <h5 class="fw-bold text-dark mb-2" style="line-height: 1.3;">${escapeHtml(item.titulo)}</h5>
+                        
+                        <div class="mt-2 mb-3 px-3 py-2 bg-light rounded-3 border" style="cursor: help;" title="Jornada e Matéria">
+                            <div class="small fw-bold text-secondary text-truncate"><i class="material-icons align-middle" style="font-size: 14px;">map</i> ${escapeHtml(ctx.jornada)}</div>
+                            <div class="small text-muted text-truncate"><i class="material-icons align-middle" style="font-size: 14px;">menu_book</i> ${escapeHtml(ctx.materia)}</div>
+                        </div>
+
+                        <div class="d-flex flex-wrap justify-content-between mb-4 text-muted small mt-auto">
+                            <span title="Data de Criação"><i class="material-icons align-middle text-secondary" style="font-size: 16px;">event</i> ${item.data}</span>
+                            <div>
+                                <button class="btn btn-sm btn-link text-primary p-0 text-decoration-none fw-bold me-2" onclick="window.abrirModalEdicaoAcervo('${item.id}')">Editar</button>
+                                <button class="btn btn-sm btn-link text-danger p-0 text-decoration-none fw-bold" onclick="window.deletarItemAcervo('${item.id}')">Excluir</button>
+                            </div>
+                        </div>
+                        
+                        <button class="btn btn-outline-primary w-100 rounded-pill fw-bold shadow-sm" onclick="${acaoClickHtml}('${item.id}')">
+                            <i class="material-icons align-middle fs-6 me-1">visibility</i> Visualizar Item
+                        </button>
+                    </div>
+                </div>`;
+            });
+            html += `</div>`;
+        } else {
+            html += `
+            <div class="bg-white rounded-4 shadow-sm border overflow-hidden mb-4">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead class="bg-light text-muted small text-uppercase">
+                            <tr>
+                                <th style="width: 50px;" class="text-center">
+                                    <input class="form-check-input" type="checkbox" onchange="AcervoUI.toggleSelectAll('${tipo}', '${containerId}', '${badgeLabel}', '${iconName}', '${acaoClickHtml}', this.checked)">
+                                </th>
+                                <th>Título</th>
+                                <th>Jornada / Matéria</th>
+                                <th>Data</th>
+                                <th class="text-end pe-4">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+            paginatedItems.forEach(item => {
+                const ctx = item.dados.contexto || { jornada: 'Estudo Livre', materia: '-' };
+                const isSelected = st.selected.includes(item.id);
+                html += `
+                            <tr class="${isSelected ? 'bg-primary-subtle' : ''}">
+                                <td class="text-center">
+                                    <input class="form-check-input" type="checkbox" ${isSelected ? 'checked' : ''} onchange="AcervoUI.toggleSelect('${tipo}', '${containerId}', '${badgeLabel}', '${iconName}', '${acaoClickHtml}', '${item.id}')">
+                                </td>
+                                <td>
+                                    <div class="fw-bold text-dark d-flex align-items-center gap-2">
+                                        <i class="material-icons text-primary" style="font-size: 18px;">${iconName}</i> ${escapeHtml(item.titulo)}
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="small fw-bold text-secondary text-truncate" style="max-width: 150px;">${escapeHtml(ctx.jornada)}</div>
+                                    <div class="small text-muted text-truncate" style="font-size: 0.75rem; max-width: 150px;">${escapeHtml(ctx.materia)}</div>
+                                </td>
+                                <td><span class="badge bg-light text-secondary border">${item.data}</span></td>
+                                <td class="text-end pe-4">
+                                    <button class="btn btn-sm btn-primary rounded-pill px-3 shadow-sm fw-bold me-1" onclick="${acaoClickHtml}('${item.id}')">Abrir</button>
+                                    <button class="btn btn-sm btn-light border text-primary rounded-circle p-1 me-1" onclick="window.abrirModalEdicaoAcervo('${item.id}')" title="Editar Metadados"><i class="material-icons" style="font-size: 18px;">edit</i></button>
+                                    <button class="btn btn-sm btn-light border text-danger rounded-circle p-1" onclick="window.deletarItemAcervo('${item.id}')" title="Excluir"><i class="material-icons" style="font-size: 18px;">delete</i></button>
+                                </td>
+                            </tr>
+                `;
+            });
+            html += `</tbody></table></div></div>`;
+        }
+
+        if (totalPages > 1) {
+            html += `<div class="d-flex justify-content-between align-items-center bg-white p-3 rounded-4 shadow-sm border border-light">
+                        <span class="small text-muted fw-bold">Página ${st.page} de ${totalPages} (Total: ${filteredItems.length})</span>
+                        <ul class="pagination pagination-sm m-0">
+                            <li class="page-item ${st.page === 1 ? 'disabled' : ''}">
+                                <button class="page-link shadow-none" onclick="AcervoUI.setPage('${tipo}', '${containerId}', '${badgeLabel}', '${iconName}', '${acaoClickHtml}', ${st.page - 1})">Anterior</button>
+                            </li>`;
+            
+            for (let p = 1; p <= totalPages; p++) {
+                if (p === 1 || p === totalPages || (p >= st.page - 1 && p <= st.page + 1)) {
+                    html += `<li class="page-item ${st.page === p ? 'active' : ''}">
+                                <button class="page-link shadow-none" onclick="AcervoUI.setPage('${tipo}', '${containerId}', '${badgeLabel}', '${iconName}', '${acaoClickHtml}', ${p})">${p}</button>
+                             </li>`;
+                } else if (p === st.page - 2 || p === st.page + 2) {
+                    html += `<li class="page-item disabled"><span class="page-link border-0">...</span></li>`;
+                }
+            }
+
+            html += `   <li class="page-item ${st.page === totalPages ? 'disabled' : ''}">
+                                <button class="page-link shadow-none" onclick="AcervoUI.setPage('${tipo}', '${containerId}', '${badgeLabel}', '${iconName}', '${acaoClickHtml}', ${st.page + 1})">Próxima</button>
+                            </li>
+                        </ul>
+                     </div>`;
+        }
+
+        container.innerHTML = html;
+    },
+
+    updateSearch: function(t, c, b, i, a, val) { this.state[t].search = val; this.state[t].page = 1; this.render(t, c, b, i, a); },
+    updateSort: function(t, c, b, i, a, val) { this.state[t].sort = val; this.render(t, c, b, i, a); },
+    updateView: function(t, c, b, i, a, val) { 
+        this.state[t].view = val; 
+        localStorage.setItem('acervo_view_pref', val);
+        this.render(t, c, b, i, a); 
+    },
+    setPage: function(t, c, b, i, a, val) { this.state[t].page = val; this.render(t, c, b, i, a); },
+    
+    toggleSelect: function(t, c, b, i, a, id) {
+        const idx = this.state[t].selected.indexOf(id);
+        if (idx > -1) this.state[t].selected.splice(idx, 1);
+        else this.state[t].selected.push(id);
+        this.render(t, c, b, i, a);
+    },
+
+    toggleSelectAll: function(t, c, b, i, a, isChecked) {
+        if (!isChecked) {
+            this.state[t].selected = [];
+        } else {
+            const termo = this.state[t].search.toLowerCase();
+            const filtered = window.acervoIA_Cache.filter(item => item.tipo === t && (
+                item.titulo.toLowerCase().includes(termo) || 
+                (item.dados && item.dados.contexto && item.dados.contexto.jornada.toLowerCase().includes(termo))
+            ));
+            this.state[t].selected = filtered.map(x => x.id);
+        }
+        this.render(t, c, b, i, a);
+    },
+
+    batchDelete: function(tipo) {
+        const idsToDelete = this.state[tipo].selected;
+        if(idsToDelete.length === 0) return;
+        
+        window.confirmarAcao(
+            "Exclusão em Massa", 
+            `Tem certeza de que deseja excluir permanentemente os ${idsToDelete.length} itens selecionados?`, 
+            "Excluir Todos", 
+            () => {
+                const email = localStorage.getItem('usuario_email');
+                if(typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal("A excluir itens em massa...");
+
+                let processados = 0;
+                idsToDelete.forEach(id => {
+                    google.script.run.withSuccessHandler(() => {
+                        processados++;
+                        if (processados === idsToDelete.length) {
+                            if(typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
+                            if(typeof showToast === 'function') showToast(`${processados} itens excluídos com sucesso!`, "success");
+                            this.state[tipo].selected = []; 
+                            window.carregarAcervoGlobal(); 
+                        }
+                    }).excluirMaterialIABanco(email, id);
+                });
+            }
+        );
+    } // FECHA A FUNÇÃO batchDelete
+}; // FECHA O OBJETO window.AcervoUI
+
+// --- WRAPPERS DE RENDERIZAÇÃO E ABERTURA SEGURA ---
+
+window.renderizarQuizzesSalvos = function() { AcervoUI.init('quiz_generator', 'grid-questionarios', 'Simulado IA', 'school', 'window.abrirQuizDoAcervo'); };
+window.renderizarResumosSalvos = function() { AcervoUI.init('summarize', 'grid-resumos', 'Resumo IA', 'auto_awesome', 'window.abrirResumoDoAcervo'); };
+window.renderizarMapasSalvos = function() { AcervoUI.init('mindmap', 'grid-mapas', 'Mapa Mental', 'account_tree', 'window.abrirMapaDoAcervo'); };
+window.renderizarCartoesSalvos = function() { AcervoUI.init('flashcards', 'grid-cartoes', 'Flashcards', 'style', 'window.abrirCartoesDoAcervo'); };
+
+window.abrirQuizDoAcervo = function(idCloud) {
+    const item = window.acervoIA_Cache.find(i => i.id === idCloud);
+    if(item) {
+        item.dados.idCloud = idCloud; 
+        window.abrirModalQuizInterativo(item.dados);
+    }
+};
+window.abrirResumoDoAcervo = function(idCloud) {
+    const item = window.acervoIA_Cache.find(i => i.id === idCloud);
+    if(item) {
+        window.abrirModalResultadoIA(item.titulo || "Resumo", item.dados.conteudo || item.dados, 'summarize', idCloud);
+    }
+};
+window.abrirMapaDoAcervo = function(idCloud) {
+    const item = window.acervoIA_Cache.find(i => i.id === idCloud);
+    if(item) {
+        window.abrirModalResultadoIA(item.titulo || "Mapa Visual", item.dados.conteudo || item.dados, 'mindmap', idCloud);
+    }
+};
+window.abrirCartoesDoAcervo = function(idCloud) {
+    const item = window.acervoIA_Cache.find(i => i.id === idCloud);
+    if(item) {
+        // Recupera os dados estruturados originais salvos na nuvem
+        let baralho = item.dados;
+        
+        // Blindagem de segurança: caso os dados antigos estivessem no formato de array puro, reconstrói
+        if (!baralho.cartoes) {
+            baralho = {
+                titulo: item.titulo || "Baralho",
+                cartoes: item.dados,
+                estilos: { tema: 'tema-classic', fonte: 'font-sans', tamanho: 1.25 },
+                contexto: item.contexto || { jornada: 'Estudo Independente', materia: '-' }
+            };
+        }
+        
+        // Abre o modal passando o objeto completo e o idCloud mapeado corretamente
+        window.abrirModalFlashcardsInterativo(baralho, idCloud);
+    }
+};
+
+// NOVO: Renderiza os 3 materiais mais recentes na Dashboard
+window.renderizarMateriaisRecentesDashboard = function() {
+    const grid = document.getElementById('grid-materiais-recentes');
+    if (!grid) return;
+
+    if (!window.acervoIA_Cache || window.acervoIA_Cache.length === 0) {
+        grid.innerHTML = `
+            <div class="col-12 text-center py-4 text-muted border rounded-4 bg-white shadow-sm" style="border-style: dashed !important;">
+              <p class="mb-0 small"><i class="material-icons align-middle me-1">history</i> Nenhum material na sua Nuvem ainda. Gere resumos e simulados!</p>
+            </div>`;
+        return;
+    }
+
+    // Pega os 3 mais recentes do Cache Global (já vêm ordenados do Google Scripts)
+    const recentes = window.acervoIA_Cache.slice(0, 3);
+    
+    let html = '';
+    recentes.forEach(item => {
+        let icone = 'description';
+        let corBadge = 'primary';
+        let funcAbrir = '';
+        let labelTipo = '';
+
+        if (item.tipo === 'quiz_generator') {
+            icone = 'school'; corBadge = 'success'; funcAbrir = 'window.abrirQuizDoAcervo'; labelTipo = 'Simulado';
+        } else if (item.tipo === 'summarize') {
+            icone = 'auto_awesome'; corBadge = 'primary'; funcAbrir = 'window.abrirResumoDoAcervo'; labelTipo = 'Resumo';
+        } else if (item.tipo === 'mindmap') {
+            icone = 'account_tree'; corBadge = 'danger'; funcAbrir = 'window.abrirMapaDoAcervo'; labelTipo = 'Mapa Mental';
+        } else if (item.tipo === 'flashcards') {
+            icone = 'style'; corBadge = 'warning text-dark'; funcAbrir = 'window.abrirCartoesDoAcervo'; labelTipo = 'Cartões';
+        }
+
+        const ctx = item.dados.contexto || { jornada: 'Estudo Livre', materia: '-' };
+
+        html += `
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm rounded-4 p-3 h-100 bg-white transition-hover d-flex flex-column" onclick="${funcAbrir}('${item.id}')" style="cursor: pointer; border: 1px solid var(--border-color) !important;">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="badge bg-${corBadge}-subtle text-${corBadge.replace(' text-dark','')} rounded-pill fw-bold d-flex align-items-center gap-1" style="font-size: 0.7rem;"><i class="material-icons" style="font-size: 12px;">${icone}</i> ${labelTipo}</span>
+                    <span class="text-muted" style="font-size: 0.7rem;">${item.data}</span>
+                </div>
+                <h6 class="fw-bold text-dark mb-1 text-truncate" style="font-size: 0.95rem;" title="${escapeHtml(item.titulo)}">${escapeHtml(item.titulo)}</h6>
+                <div class="text-muted small mt-auto text-truncate" style="font-size: 0.75rem;">
+                    <i class="material-icons align-middle" style="font-size: 14px;">map</i> ${escapeHtml(ctx.jornada)}
+                </div>
+            </div>
+        </div>
+        `;
+    });
+    
+    grid.innerHTML = html;
+};
+
+/* ==========================================================================
+   MODAL PREMIUM: MAPAS, RESUMOS E FLASHCARDS (RENDERIZAÇÃO UNIVERSAL)
+   ========================================================================== */
+
+window.abrirModalResultadoIA = function(titulo, textoMarkdown, tipoOrigem = 'resumo', idCloud = null) {
+  window.resultadoIAAtual = { titulo: titulo, conteudo: textoMarkdown, tipo: tipoOrigem, idCloud: idCloud };
+
+  let modal = document.getElementById('modal-ia-resultado');
+  
+  const formatarMarkdown = (md) => {
+    let mermaidBlocks = [];
+    let hasMermaid = false;
+    const userTheme = document.getElementById('ia-mindmap-theme') ? document.getElementById('ia-mindmap-theme').value : 'default';
+    
+    let tempMd = md.replace(/```mermaid([\s\S]*?)```/g, (match, code) => {
+       hasMermaid = true;
+       let cleanCode = `%%{init: {'theme': '${userTheme}'}}%%\n` + code.trim().replace(/&/g, 'e');
+       mermaidBlocks.push(cleanCode);
+       return `__COFRE_MERMAID_${mermaidBlocks.length - 1}__`;
+    });
+
+    let html = tempMd
+      .replace(/^### (.*$)/gim, '<h4 class="fw-bold mt-3">$1</h4>')
+      .replace(/^## (.*$)/gim, '<h3 class="fw-bold mt-4">$1</h3>')
+      .replace(/^# (.*$)/gim, '<h2 class="fw-bold mt-4">$1</h2>')
+      .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
+      .replace(/^\* (.*$)/gim, '<li>$1</li>');
+    
+    html = html.replace(/<\/li>\n<li>/gim, '</li><li>').replace(/\n/gim, '<br>');
+
+    if (hasMermaid) {
+       mermaidBlocks.forEach((code, index) => {
+          // CORREÇÃO: Altura responsiva (60vh) e user-select: none para evitar selecionar texto
+          const container = `
+            <div class="mermaid-wrapper w-100 mt-3 mb-4 shadow-sm p-2 d-flex flex-column" style="background: var(--bg-input); border-color: var(--border-color);">
+                <div class="d-flex justify-content-end mb-2 gap-2 flex-shrink-0">
+                    <button class="btn btn-sm border" style="background: var(--bg-card); color: var(--text-main);" onclick="window.zoomMermaid(-0.2)" title="Diminuir"><i class="material-icons">zoom_out</i></button>
+                    <button class="btn btn-sm border" style="background: var(--bg-card); color: var(--text-main);" onclick="window.zoomMermaid(0.2)" title="Aumentar"><i class="material-icons">zoom_in</i></button>
+                    <button class="btn btn-sm btn-primary d-flex align-items-center gap-1 fw-bold" onclick="window.baixarMapaMentalPng()"><i class="material-icons fs-6">download</i> Salvar PNG</button>
+                </div>
+                <div id="mermaid-pan-zoom" style="overflow: hidden; width: 100%; height: 60vh; min-height: 400px; display: flex; align-items: center; justify-content: center; cursor: grab; position: relative; user-select: none; -webkit-user-select: none;">
+                    <div class="mermaid" style="position: absolute; transform-origin: center; transition: transform 0.1s ease-out;">${code}</div>
+                </div>
+            </div>`;
+          html = html.replace(`__COFRE_MERMAID_${index}__`, container);
+       });
+    }
+    return { html: html, hasMermaid: hasMermaid };
+  };
+
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'modal-ia-resultado';
+    modal.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15,23,42,0.8); z-index:10600; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(5px); padding:20px;';
+    document.body.appendChild(modal);
+  }
+
+  const formatedData = formatarMarkdown(textoMarkdown);
+
+  const isSaved = !!idCloud;
+  const btnSalvarHtml = isSaved ? '' : `
+         <button class="btn btn-warning btn-sm fw-bold shadow-sm d-flex align-items-center gap-1 text-dark rounded-pill px-3" onclick="window.salvarResultadoGenericoNoBanco()">
+            <i class="material-icons fs-6">save</i> Salvar
+         </button>`;
+
+  modal.innerHTML = `
+  <div style="background: var(--bg-card); color: var(--text-main); width:100%; max-width:900px; height:85vh; border-radius:var(--radius-lg); display:flex; flex-direction:column; overflow:hidden; box-shadow:var(--shadow-lg); border: 1px solid var(--border-color);">
+    <div class="d-flex justify-content-between align-items-center p-3 border-bottom" style="background: var(--bg-input);">
+      <h4 class="fw-bold m-0 d-flex align-items-center text-primary"><i class="material-icons me-2">auto_awesome</i> ${titulo}</h4>
+      <div class="d-flex gap-2">
+         ${btnSalvarHtml}
+         <button class="btn btn-light rounded-circle p-1 d-flex align-items-center justify-content-center border-0" style="background: transparent; color: var(--text-main);" onclick="document.getElementById('modal-ia-resultado').style.display='none';">
+            <i class="material-icons">close</i>
+         </button>
+      </div>
+    </div>
+    <div style="flex:1; overflow-y:auto; padding:30px; font-size:15px; line-height:1.6; display: flex; flex-direction: column;">
+      ${formatedData.html}
+    </div>
+  </div>`;
+  
+  modal.style.display = 'flex';
+
+  if (formatedData.hasMermaid && typeof mermaid !== 'undefined') {
+     setTimeout(() => {
+         try {
+             mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' });
+             mermaid.init(undefined, document.querySelectorAll('.mermaid'));
+             // Zera as variáveis de movimento sempre que abre um mapa novo
+             window.currentMermaidScale = 1;
+             window.currentTranslateX = 0;
+             window.currentTranslateY = 0;
+             if(typeof iniciarPanZoomMermaid === 'function') iniciarPanZoomMermaid();
+         } catch (e) { console.error("Erro no Mermaid:", e); }
+     }, 100);
+  }
+};
+
+/* ==========================================================================
+   MOTOR DE NAVEGAÇÃO E DOWNLOAD DO MAPA MENTAL (PAN & ZOOM)
+   ========================================================================== */
+
+window.currentMermaidScale = 1;
+window.currentTranslateX = 0;
+window.currentTranslateY = 0;
+
+window.atualizarTransformacaoMermaid = function() {
+    const mermaidDiv = document.querySelector('.mermaid');
+    if(mermaidDiv) {
+        mermaidDiv.style.transform = `translate(${window.currentTranslateX}px, ${window.currentTranslateY}px) scale(${window.currentMermaidScale})`;
+    }
+};
+
+window.zoomMermaid = function(step) {
+    window.currentMermaidScale += step;
+    if (window.currentMermaidScale < 0.3) window.currentMermaidScale = 0.3;
+    if (window.currentMermaidScale > 5.0) window.currentMermaidScale = 5.0; 
+    window.atualizarTransformacaoMermaid();
+};
+
+window.mermaidHandlersAtivos = false;
+
+window.iniciarPanZoomMermaid = function() {
+    const container = document.getElementById('mermaid-pan-zoom');
+    if (!container) return;
+
+    let isDragging = false;
+    let startX, startY;
+
+    container.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        container.style.cursor = 'grabbing';
+        // Desconta o quanto já nos movemos para que o clique não dê "saltos"
+        startX = e.clientX - window.currentTranslateX;
+        startY = e.clientY - window.currentTranslateY;
+    });
+
+    // Registra os ouvintes no document apenas uma vez para o arrasto funcionar suave fora do quadro
+    if (!window.mermaidHandlersAtivos) {
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            e.preventDefault();
+            window.currentTranslateX = e.clientX - startX;
+            window.currentTranslateY = e.clientY - startY;
+            window.atualizarTransformacaoMermaid();
+        });
+
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+            const cnt = document.getElementById('mermaid-pan-zoom');
+            if(cnt) cnt.style.cursor = 'grab';
+        });
+        window.mermaidHandlersAtivos = true;
+    }
+};
+
+window.baixarMapaMentalPng = function() {
+    const svgElement = document.querySelector('.mermaid svg');
+    if (!svgElement) {
+        alert("Ouve um erro ao localizar o gráfico. Tente gerar novamente.");
+        return;
+    }
+
+    if(typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal("A renderizar PNG de alta qualidade...");
+
+    // Cria um clone do SVG para manipular sem estragar a tela
+    const clone = svgElement.cloneNode(true);
+    const bbox = svgElement.getBoundingClientRect();
+    
+    // Força dimensões absolutas
+    clone.setAttribute('width', bbox.width);
+    clone.setAttribute('height', bbox.height);
+    
+    // Injeta um fundo branco no clone
+    const style = document.createElement('style');
+    style.innerHTML = 'svg { background-color: #ffffff; }';
+    clone.insertBefore(style, clone.firstChild);
+
+    // Serializa o SVG
+    const svgData = new XMLSerializer().serializeToString(clone);
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+    
+    // Dobra a resolução para o texto não ficar borrado no PNG (Retina Display)
+    canvas.width = bbox.width * 2;
+    canvas.height = bbox.height * 2;
+
+    img.onload = function() {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        
+        const link = document.createElement('a');
+        link.download = window.resultadoIAAtual ? (window.resultadoIAAtual.titulo + '.png') : 'mapa_mental.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        
+        if(typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
+    };
+    
+    // Transforma o texto XML em base64 segura para o elemento Image processar
+    img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+};
+
+/* ==========================================================================
+   MODAL PREMIUM: QUIZ INTERATIVO COM HISTÓRICO, TTS E EXPORTAÇÃO
+   ========================================================================== */
+window.quizDataAtual = null; 
+
+window.lerParteQuiz = function(qIndex, parte, btnElement) {
+    if (!window.quizDataAtual || !window.quizDataAtual.questoes[qIndex]) return;
+    const q = window.quizDataAtual.questoes[qIndex];
+    let textoLeitura = "";
+    
+    if (parte === 'enunciado') textoLeitura = `Questão ${qIndex + 1}. ${q.enunciado}`;
+    else if (parte === 'opcoes') {
+        textoLeitura = "As alternativas são: ";
+        q.opcoes.forEach((op, oIdx) => { textoLeitura += `Alternativa ${String.fromCharCode(65 + oIdx)}: ${op}. `; });
+    } else if (parte === 'tudo') {
+        textoLeitura = `Questão ${qIndex + 1}. ${q.enunciado}. As alternativas são: `;
+        q.opcoes.forEach((op, oIdx) => { textoLeitura += `Alternativa ${String.fromCharCode(65 + oIdx)}: ${op}. `; });
+    } else if (parte === 'explicacao') textoLeitura = `Comentário da Banca: ${q.explicacao}`;
+    
+    if (window.LeitorTTS) window.LeitorTTS.ler(textoLeitura, btnElement);
+};
+
+window.abrirModalQuizInterativo = function(quizData) {
+    window.quizDataAtual = quizData;
+    window.quizDataAtual.respostasTemporarias = { acertos: 0, respondidas: 0 };
+    
+    const oldModal = document.getElementById('modal-ia-quiz');
+    if(oldModal) oldModal.remove();
+    
+    let modal = document.createElement('div');
+    modal.id = 'modal-ia-quiz';
+    modal.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15,23,42,0.9); z-index:10600; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(8px); padding:20px;';
+    document.body.appendChild(modal);
+
+    let html = `
+    <div style="background:#f8fafc; width:100%; max-width:900px; height:90vh; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.5); display:flex; flex-direction:column; overflow:hidden; position: relative;">
+        <div class="d-flex justify-content-between align-items-center p-4 border-bottom bg-white" style="z-index: 10;">
+            <div>
+                <span class="badge bg-success mb-2 px-3 py-2 rounded-pill fw-bold shadow-sm"><i class="material-icons fs-6 align-middle me-1">school</i> Simulador Premium</span>
+                <h3 class="fw-bold m-0" style="color: #1e293b;">${escapeHtml(quizData.titulo)}</h3>
+            </div>
+            <button class="btn-close fs-5" onclick="document.getElementById('modal-ia-quiz').remove(); if(window.LeitorTTS) window.LeitorTTS.parar();"></button>
+        </div>
+        <div id="quiz-container-scroll" style="flex:1; overflow-y:auto; padding:30px; background: #f1f5f9;">`;
+
+    if (quizData.historico && quizData.historico.length > 0) {
+        html += `
+        <div class="mb-4 p-3 rounded-4 border bg-white shadow-sm d-flex align-items-center gap-3 overflow-auto">
+            <div class="d-flex align-items-center gap-2 text-secondary fw-bold flex-shrink-0">
+                <i class="material-icons text-primary">history</i> O teu Histórico:
+            </div>
+            <div class="d-flex gap-2 flex-nowrap">
+                ${quizData.historico.map((t, idx) => {
+                    let badgeColor = t.percentual >= 70 ? 'success' : (t.percentual >= 50 ? 'warning text-dark' : 'danger');
+                    return `<span class="badge bg-${badgeColor} shadow-sm px-3 py-2 rounded-pill" style="font-size: 0.85rem; border: 1px solid rgba(0,0,0,0.1);">T${idx+1}: ${t.acertos}/${t.total} (${t.percentual}%) <small class="fw-normal ms-1 opacity-75">${t.data.split(' ')[0]}</small></span>`;
+                }).join('')}
+            </div>
+        </div>`;
+    }
+
+    quizData.questoes.forEach((q, qIndex) => {
+        html += `
+            <div class="quiz-card position-relative bg-white border border-light shadow-sm rounded-4 mb-4 p-4" id="q-card-${qIndex}">
+                <div class="position-absolute top-0 end-0 mt-3 me-3 z-2">
+                    <div class="btn-group shadow-sm bg-white rounded border">
+                        <button class="btn btn-sm btn-light d-flex align-items-center gap-1 px-2 text-primary border-0" onclick="window.lerParteQuiz(${qIndex}, 'enunciado', this)"><i class="material-icons" style="font-size:16px;">record_voice_over</i></button>
+                        <button class="btn btn-sm btn-light d-flex align-items-center gap-1 px-2 text-primary border-0" onclick="window.lerParteQuiz(${qIndex}, 'opcoes', this)"><i class="material-icons" style="font-size:16px;">format_list_bulleted</i></button>
+                        <button class="btn btn-sm btn-primary d-flex align-items-center gap-1 px-2 border-0" onclick="window.lerParteQuiz(${qIndex}, 'tudo', this)"><i class="material-icons" style="font-size:16px;">volume_up</i></button>
+                    </div>
+                </div>
+                <div class="pe-5 mb-4 text-dark" style="font-size: 16px;"><span class="text-success fw-bold me-2 fs-5">Q${qIndex + 1}.</span> ${escapeHtml(q.enunciado).replace(/\n/g, '<br>')}</div>
+                <div class="d-flex flex-column gap-2">`;
+        
+        q.opcoes.forEach((op, oIndex) => {
+            html += `
+                <div class="quiz-option p-3 border rounded-3 d-flex align-items-start gap-3 transition-hover bg-light" id="opt-${qIndex}-${oIndex}" onclick="window.resolverQuestao(${qIndex}, ${oIndex}, ${q.indice_correto})" style="cursor: pointer;">
+                    <div style="width: 24px; height: 24px; border-radius: 50%; border: 2px solid #cbd5e1; display:flex; align-items:center; justify-content:center; flex-shrink:0; background: #fff;" class="opt-circle"></div>
+                    <div class="text-secondary fw-semibold" style="line-height: 1.4;">${escapeHtml(op)}</div>
+                </div>`;
+        });
+
+        html += `
+                </div>
+                <div class="quiz-feedback shadow-sm border border-success-subtle bg-success-subtle rounded-3 p-3 mt-4" id="feedback-${qIndex}" style="display: none;">
+                    <div class="d-flex justify-content-between align-items-center mb-2 fw-bold text-success">
+                        Gabarito Comentado
+                        <button class="btn btn-sm btn-success rounded-circle p-1 d-flex align-items-center justify-content-center shadow-sm" onclick="window.lerParteQuiz(${qIndex}, 'explicacao', this)"><i class="material-icons" style="font-size:18px;">volume_up</i></button>
+                    </div>
+                    <div class="text-dark small" style="line-height:1.6;">${escapeHtml(q.explicacao)}</div>
+                </div>
+            </div>`;
+    });
+
+    const isSaved = !!quizData.idCloud;
+    const btnSalvarHtml = isSaved ? '' : `
+                <button id="btn-salvar-quiz-modal" class="btn btn-warning fw-bold px-4 shadow-sm text-dark d-flex align-items-center gap-2 rounded-pill" onclick="window.salvarQuizNoBanco()">
+                    <i class="material-icons fs-5">save</i> Salvar
+                </button>
+                <div class="vr bg-secondary opacity-25 mx-1 d-none d-md-block"></div>`;
+
+    html += `
+        </div>
+        <div class="p-3 border-top bg-white d-flex justify-content-between align-items-center flex-wrap gap-3 shadow-lg" style="min-height: 80px; z-index: 10;">
+            <span class="text-muted small fw-bold ms-2 px-3 py-1 bg-light rounded-pill border"><i class="material-icons align-middle text-primary" style="font-size: 16px;">task_alt</i> ${quizData.questoes.length} Questões</span>
+            
+            <div class="d-flex gap-2 flex-wrap">
+                ${btnSalvarHtml}
+                <button class="btn btn-outline-secondary fw-bold px-3 shadow-sm d-flex align-items-center gap-1 rounded-pill" onclick="window.exportarProvaParaVisualizar('aluno')">
+                    <i class="material-icons fs-6">print</i> Imprimir Aluno
+                </button>
+                <button class="btn btn-success fw-bold px-3 shadow-sm d-flex align-items-center gap-1 rounded-pill" onclick="window.exportarProvaParaVisualizar('professor')">
+                    <i class="material-icons fs-6">verified</i> Imprimir Prof.
+                </button>
+                <button class="btn btn-outline-primary fw-bold px-3 shadow-sm d-flex align-items-center gap-1 rounded-pill" onclick="window.copyQuizToClipboard()">
+                    <i class="material-icons fs-6">code</i> HTML
+                </button>
+            </div>
+        </div>
+    </div>`;
+    modal.innerHTML = html;
+};
+
+window.resolverQuestao = function(qIndex, clicadaIndex, corretaIndex) {
+    const card = document.getElementById(`q-card-${qIndex}`);
+    if (card.classList.contains('respondida')) return; 
+    card.classList.add('respondida');
+
+    clicadaIndex = Number(clicadaIndex);
+    corretaIndex = Number(corretaIndex);
+    const acertou = (clicadaIndex === corretaIndex);
+
+    document.getElementById(`feedback-${qIndex}`).style.display = 'block';
+
+    window.quizDataAtual.respostasTemporarias.respondidas++;
+    if (acertou) window.quizDataAtual.respostasTemporarias.acertos++;
+
+    const opcoes = card.querySelectorAll('.quiz-option');
+    opcoes.forEach((op, index) => {
+        const circulo = op.querySelector('.opt-circle');
+        if (index === corretaIndex) {
+            op.classList.remove('bg-light');
+            op.classList.add('show-correct');
+            circulo.innerHTML = '<i class="material-icons" style="font-size:16px; color:#15803d;">check</i>';
+            circulo.style.borderColor = '#22c55e';
+            circulo.style.background = '#dcfce3';
+        } else if (index === clicadaIndex && !acertou) {
+            op.classList.remove('bg-light');
+            op.classList.add('selected-wrong');
+            circulo.innerHTML = '<i class="material-icons" style="font-size:16px; color:#b91c1c;">close</i>';
+            circulo.style.borderColor = '#ef4444';
+            circulo.style.background = '#fee2e2';
+        }
+    });
+
+    if(typeof dispararAcaoGamificacao === 'function') {
+        if(acertou) dispararAcaoGamificacao('acertar_questao_quiz');
+        else dispararAcaoGamificacao('errar_questao_quiz');
+    }
+
+    if (window.quizDataAtual.respostasTemporarias.respondidas === window.quizDataAtual.questoes.length) {
+        window.finalizarTentativaQuiz();
+    }
+};
+
+window.finalizarTentativaQuiz = function() {
+    const temp = window.quizDataAtual.respostasTemporarias;
+    if (!window.quizDataAtual.historico) window.quizDataAtual.historico = [];
+
+    const percentual = Math.round((temp.acertos / temp.respondidas) * 100);
+    const tentativa = {
+        data: new Date().toLocaleString('pt-BR'),
+        acertos: temp.acertos,
+        total: temp.respondidas,
+        percentual: percentual
+    };
+
+    window.quizDataAtual.historico.push(tentativa);
+
+    const msg = `Simulado Concluído! Acertaste ${tentativa.acertos} de ${tentativa.total} (${tentativa.percentual}%).`;
+    if (typeof showToast === 'function') showToast(msg, "info");
+
+    if (window.quizDataAtual.idCloud) {
+        window.salvarQuizNoBanco(true); 
+    } else {
+        const btnSalvar = document.getElementById('btn-salvar-quiz-modal');
+        if (btnSalvar) {
+            btnSalvar.classList.replace('btn-warning', 'btn-danger');
+            btnSalvar.classList.add('pulse-btn-add');
+            btnSalvar.innerHTML = '<i class="material-icons fs-5">cloud_upload</i> Guardar Histórico';
+        }
+    }
+};
+
+/* ==========================================================================
+   SISTEMA DE PRÉ-VISUALIZAÇÃO DE IMPRESSÃO E PDF
+   ========================================================================== */
+
+window.exportarProvaParaVisualizar = function(tipo) {
+    const data = window.quizDataAtual;
+    if (!data) return;
+
+    const isProf = tipo === 'professor';
+    const subtitulo = isProf ? 'Gabarito Comentado do Professor' : 'Caderno de Questões do Aluno';
+
+    let htmlContent = `
+        <div id="print-content-wrapper" style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #1e293b; background: #ffffff; padding: 30px;">
+            <h2 style="text-align: center; color: #0f172a; margin-bottom: 5px; font-weight: bold;">${escapeHtml(data.titulo)}</h2>
+            <p style="text-align: center; color: #475569; font-size: 14px; margin-bottom: 30px; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; font-weight: bold;">
+                ${subtitulo.toUpperCase()}
+            </p>
+    `;
+
+    data.questoes.forEach((q, i) => {
+        htmlContent += `<div style="margin-bottom: 35px; page-break-inside: avoid;">`;
+        htmlContent += `<div style="font-size: 16px; font-weight: bold; margin-bottom: 15px; line-height: 1.5;">Questão ${i + 1}. <span style="font-weight: normal;">${escapeHtml(q.enunciado).replace(/\n/g, '<br>')}</span></div>`;
+        
+        q.opcoes.forEach((op, oIdx) => {
+            const isCorreta = isProf && (oIdx === q.indice_correto);
+            const corLetra = isCorreta ? '#15803d' : '#334155';
+            const negrito = isCorreta ? 'bold' : 'normal';
+            const letra = String.fromCharCode(65 + oIdx); 
+            
+            htmlContent += `<div style="margin-bottom: 10px; padding-left: 20px; color: ${corLetra}; font-weight: ${negrito}; display: flex; align-items: flex-start; gap: 8px;">`;
+            htmlContent += `<span>${isCorreta ? '✓' : '( )'}</span> <div><b>${letra})</b> ${escapeHtml(op)}</div>`;
+            htmlContent += `</div>`;
+        });
+
+        if (isProf) {
+            htmlContent += `
+                <div style="margin-top: 20px; padding: 15px; background-color: #f1f5f9; border-left: 4px solid #3b82f6; font-size: 14px; color: #334155; border-radius: 4px;">
+                    <b>Comentário da Banca:</b><br>${escapeHtml(q.explicacao)}
+                </div>`;
+        }
+        htmlContent += `</div>`;
+    });
+    
+    htmlContent += `</div>`;
+    window.abrirPreviewImpressao(htmlContent, subtitulo, escapeHtml(data.titulo));
+};
+
+window.abrirPreviewImpressao = function(htmlContent, subtitulo, tituloArquivo) {
+    let modal = document.getElementById('modal-print-preview');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'modal-print-preview';
+        modal.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15,23,42,0.95); z-index:10800; display:flex; flex-direction:column; align-items:center; padding:20px;';
+        document.body.appendChild(modal);
+    }
+
+    modal.innerHTML = `
+    <div class="d-flex justify-content-between align-items-center w-100 mb-3" style="max-width: 900px;">
+        <div class="text-white">
+            <h4 class="m-0 fw-bold d-flex align-items-center gap-2"><i class="material-icons">visibility</i> Pré-visualização</h4>
+            <small class="opacity-75">${subtitulo}</small>
+        </div>
+        <button class="btn btn-outline-light rounded-circle p-2 d-flex align-items-center justify-content-center border-0" onclick="document.getElementById('modal-print-preview').style.display='none';"><i class="material-icons">close</i></button>
+    </div>
+    
+    <div class="bg-white rounded-3 shadow-lg overflow-auto flex-grow-1 w-100" style="max-width: 900px; padding: 0;" id="preview-content-box">
+        ${htmlContent}
+    </div>
+
+    <div class="w-100 d-flex justify-content-center gap-3 mt-4" style="max-width: 900px;">
+        <button class="btn btn-light fw-bold px-4 rounded-pill shadow-sm" onclick="document.getElementById('modal-print-preview').style.display='none';">
+            <i class="material-icons align-middle fs-6 me-1">arrow_back</i> Voltar
+        </button>
+        <button class="btn btn-primary fw-bold px-4 rounded-pill shadow-sm d-flex align-items-center gap-2" onclick="window.baixarPreviewComoPDF('${tituloArquivo}', '${subtitulo}')">
+            <i class="material-icons fs-6">picture_as_pdf</i> Salvar PDF
+        </button>
+        <button class="btn btn-success fw-bold px-4 rounded-pill shadow-sm d-flex align-items-center gap-2" onclick="window.imprimirPreviewDireto()">
+            <i class="material-icons fs-6">print</i> Imprimir Agora
+        </button>
+    </div>
+    `;
+    modal.style.display = 'flex';
+};
+
+window.imprimirPreviewDireto = function() {
+    const conteudo = document.getElementById('preview-content-box').innerHTML;
+    const newWindow = window.open('', '_blank');
+    newWindow.document.write(`<html><head><title>Impressão</title><style>body { margin: 0; padding: 0; } @media print { body { padding: 20px; } }</style></head><body onload="window.print(); window.close();">${conteudo}</body></html>`);
+    newWindow.document.close();
+};
+
+window.baixarPreviewComoPDF = function(titulo, subtitulo) {
+    if(typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal("A gerar arquivo PDF...");
+    
+    if (typeof html2pdf === 'undefined') {
+        const script = document.createElement('script');
+        script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
+        script.onload = () => executarHtml2Pdf(titulo, subtitulo);
+        document.body.appendChild(script);
+    } else {
+        executarHtml2Pdf(titulo, subtitulo);
+    }
+};
+
+function executarHtml2Pdf(titulo, subtitulo) {
+    const element = document.getElementById('print-content-wrapper');
+    const opt = {
+        margin:       15,
+        filename:     `${titulo} - ${subtitulo}.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+
+    html2pdf().set(opt).from(element).save().then(() => {
+        if(typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
+        if(typeof showToast === 'function') showToast("Download do PDF concluído com sucesso!", "success");
+    }).catch(err => {
+        if(typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
+        alert("Erro ao gerar PDF: " + err);
+    });
+}
+
+window.copyQuizToClipboard = function() {
+  if (!window.quizDataAtual) {
+    if(typeof showToast === 'function') showToast("Nenhum quiz gerado para copiar.", "warning");
+    return;
+  }
+  let htmlTemplate = `
+<div class="quiz-embed-container" style="font-family: sans-serif; max-width: 600px; margin: auto;">
+  <h2 style="color: #1e293b;">${escapeHtml(window.quizDataAtual.titulo)}</h2>
+  ${window.quizDataAtual.questoes.map((q, i) => `
+    <div class="quiz-question" style="margin-bottom: 20px; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px;">
+      <p style="font-weight: bold;">${i + 1}. ${escapeHtml(q.enunciado)}</p>
+      <ul style="list-style: none; padding: 0;">
+        ${q.opcoes.map(op => `<li style="padding: 5px 0;">[ ] ${escapeHtml(op)}</li>`).join('')}
+      </ul>
+    </div>
+  `).join('')}
+</div>`;
+
+  navigator.clipboard.writeText(htmlTemplate).then(() => {
+    if(typeof showToast === 'function') showToast("HTML do quiz copiado com sucesso!", "success");
+  }).catch(err => {
+    if(typeof showToast === 'function') showToast("Erro ao copiar o código.", "error");
+    console.error(err);
+  });
+};
+
+if (typeof escapeHtml !== 'function') {
+    window.escapeHtml = function(unsafe) {
+        return (unsafe || "").toString()
+             .replace(/&/g, "&amp;")
+             .replace(/</g, "&lt;")
+             .replace(/>/g, "&gt;")
+             .replace(/"/g, "&quot;")
+             .replace(/'/g, "&#039;");
+    };
+}
+
+/* ==========================================================================
+   MOTOR DE EDIÇÃO DO ACERVO (TÍTULO, JORNADA, MATÉRIA E TÓPICO EM CASCATA)
+   ========================================================================== */
+
+window.abrirModalEdicaoAcervo = function(idItem) {
+    const item = window.acervoIA_Cache.find(i => i.id === idItem);
+    if (!item) return;
+    
+    const ctx = item.dados.contexto || { jornada: '', materia: '', topico: '' };
+    const jorAtual = ctx.jornada || 'Estudo Independente';
+    const matAtual = ctx.materia || 'Matéria Não Especificada';
+    const topAtual = ctx.topico || 'Tópico Não Especificado';
+    
+    let modal = document.getElementById('modal-editar-acervo');
+    if (modal) modal.remove();
+
+    modal = document.createElement('div');
+    modal.id = 'modal-editar-acervo';
+    modal.className = 'modal fade';
+    modal.setAttribute('tabindex', '-1');
+
+    modal.innerHTML = `
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 border-0 shadow-lg p-4" style="background: var(--bg-card);">
+            <h5 class="fw-bold text-dark mb-4"><i class="material-icons align-middle text-primary me-2">edit_note</i>Editar Metadados</h5>
+            
+            <div class="mb-3">
+                <label class="form-label small fw-bold text-secondary">Título do Material</label>
+                <input type="text" id="edit-acervo-titulo" class="form-control bg-light fw-bold text-dark" value="${escapeHtml(item.titulo)}">
+            </div>
+            
+            <div class="mb-3">
+                <label class="form-label small fw-bold text-secondary">Jornada Vinculada</label>
+                <select id="edit-acervo-jornada-select" class="form-select bg-light mb-2 fw-semibold text-primary" onchange="window.mudarJornadaEdicaoAcervo()">
+                    <option value="Estudo Independente">Estudo Independente (Avulso)</option>
+                    <option value="OUTRA" class="text-secondary">➕ Digitar outra jornada livremente...</option>
+                </select>
+                <input type="text" id="edit-acervo-jornada-input" class="form-control bg-light border-primary" style="display:none;" placeholder="Digite o nome da nova jornada...">
+            </div>
+            
+            <div class="mb-3">
+                <label class="form-label small fw-bold text-secondary">Matéria / Disciplina</label>
+                <select id="edit-acervo-materia-select" class="form-select bg-light mb-2 fw-semibold text-primary" onchange="window.mudarMateriaEdicaoAcervo()">
+                    <option value="Matéria Não Especificada">Matéria Não Especificada</option>
+                    <option value="OUTRA" class="text-secondary">➕ Digitar outra matéria livremente...</option>
+                </select>
+                <input type="text" id="edit-acervo-materia-input" class="form-control bg-light border-primary" style="display:none;" placeholder="Digite o nome da nova matéria...">
+            </div>
+
+            <div class="mb-4">
+                <label class="form-label small fw-bold text-secondary">Tópico do Assunto</label>
+                <select id="edit-acervo-topico-select" class="form-select bg-light mb-2 fw-semibold text-primary" onchange="window.mudarTopicoEdicaoAcervo()">
+                    <option value="Tópico Não Especificado">Tópico Não Especificado</option>
+                    <option value="OUTRO" class="text-secondary">➕ Digitar outro tópico livremente...</option>
+                </select>
+                <input type="text" id="edit-acervo-topico-input" class="form-control bg-light border-primary" style="display:none;" placeholder="Digite o nome do tópico...">
+            </div>
+            
+            <div class="d-flex gap-2 w-100 mt-2">
+                <button class="btn btn-light w-50 rounded-pill fw-bold border" data-bs-dismiss="modal">Cancelar</button>
+                <button class="btn btn-primary w-50 rounded-pill fw-bold shadow-sm" onclick="window.salvarEdicaoAcervo('${item.id}')">Salvar</button>
+            </div>
+        </div>
+    </div>`;
+
+    document.body.appendChild(modal);
+
+    const selJor = document.getElementById('edit-acervo-jornada-select');
+    const inpJor = document.getElementById('edit-acervo-jornada-input');
+    
+    let jorEncontrada = false;
+    if (typeof minhasJornadas !== 'undefined' && minhasJornadas.length > 0) {
+        minhasJornadas.forEach(j => {
+            const opt = document.createElement('option');
+            opt.value = j.titulo;
+            // CORTADOR DE CARACTERES
+            opt.text = j.titulo.length > 50 ? j.titulo.substring(0, 50) + '...' : j.titulo;
+            opt.title = j.titulo; // Mantém o texto completo no balãozinho do mouse
+            
+            selJor.insertBefore(opt, selJor.options[selJor.options.length - 1]);
+            if (j.titulo === jorAtual) jorEncontrada = true;
+        });
+    }
+
+    if (jorEncontrada || jorAtual === 'Estudo Independente') {
+        selJor.value = jorAtual;
+    } else {
+        selJor.value = 'OUTRA';
+        inpJor.value = jorAtual;
+        inpJor.style.display = 'block';
+    }
+
+    // Inicializa a cascata de Matérias e Tópicos baseado nos valores atuais do item
+    window.mudarJornadaEdicaoAcervo(matAtual, topAtual);
+
+    new bootstrap.Modal(modal).show();
+};
+
+window.mudarJornadaEdicaoAcervo = function(matParaSelecionar = null, topParaSelecionar = null) {
+    const selJor = document.getElementById('edit-acervo-jornada-select');
+    const inpJor = document.getElementById('edit-acervo-jornada-input');
+    const selMat = document.getElementById('edit-acervo-materia-select');
+    const inpMat = document.getElementById('edit-acervo-materia-input');
+
+    if (!selJor || !selMat) return;
+
+    const valJor = selJor.value;
+
+    if (valJor === 'OUTRA') {
+        inpJor.style.display = 'block';
+        if(!inpJor.value && !matParaSelecionar) inpJor.focus();
+    } else {
+        inpJor.style.display = 'none';
+    }
+
+    selMat.innerHTML = `
+        <option value="Matéria Não Especificada">Matéria Não Especificada</option>
+        <option value="OUTRA" class="text-secondary">➕ Digitar outra matéria livremente...</option>
+    `;
+
+    let matEncontrada = false;
+
+    if (valJor !== 'OUTRA' && valJor !== 'Estudo Independente') {
+        const journey = (typeof minhasJornadas !== 'undefined') ? minhasJornadas.find(j => j.titulo === valJor) : null;
+        if (journey && journey.materias) {
+            journey.materias.forEach(m => {
+                const matNome = m.name || m.nome;
+                const opt = document.createElement('option');
+                opt.value = matNome;
+                
+                // CORTADOR DE CARACTERES
+                opt.text = matNome.length > 50 ? matNome.substring(0, 50) + '...' : matNome;
+                opt.title = matNome;
+                
+                selMat.insertBefore(opt, selMat.options[selMat.options.length - 1]);
+                if (matParaSelecionar && matNome === matParaSelecionar) matEncontrada = true;
+            });
+        }
+    }
+
+    if (matParaSelecionar) {
+        if (matEncontrada || matParaSelecionar === 'Matéria Não Especificada') {
+            selMat.value = matParaSelecionar;
+        } else {
+            selMat.value = 'OUTRA';
+            inpMat.value = matParaSelecionar;
+            inpMat.style.display = 'block';
+        }
+    } else {
+        selMat.value = 'Matéria Não Especificada';
+        inpMat.style.display = 'none';
+    }
+
+    window.mudarMateriaEdicaoAcervo(topParaSelecionar);
+};
+
+window.mudarMateriaEdicaoAcervo = function(topParaSelecionar = null) {
+    const selJor = document.getElementById('edit-acervo-jornada-select');
+    const selMat = document.getElementById('edit-acervo-materia-select');
+    const inpMat = document.getElementById('edit-acervo-materia-input');
+    const selTop = document.getElementById('edit-acervo-topico-select');
+    const inpTop = document.getElementById('edit-acervo-topico-input');
+
+    if (!selMat || !selTop) return;
+
+    const valJor = selJor.value;
+    const valMat = selMat.value;
+
+    if (valMat === 'OUTRA') {
+        inpMat.style.display = 'block';
+        if(!inpMat.value && !topParaSelecionar) inpMat.focus();
+    } else {
+        inpMat.style.display = 'none';
+    }
+
+    selTop.innerHTML = `
+        <option value="Tópico Não Especificado">Tópico Não Especificado</option>
+        <option value="OUTRO" class="text-secondary">➕ Digitar outro tópico livremente...</option>
+    `;
+
+    let topEncontrado = false;
+
+    // Filtra os tópicos da matéria selecionada dentro daquela jornada específica
+    if (valJor !== 'OUTRA' && valJor !== 'Estudo Independente' && valMat !== 'OUTRA' && valMat !== 'Matéria Não Especificada') {
+        const journey = (typeof minhasJornadas !== 'undefined') ? minhasJornadas.find(j => j.titulo === valJor) : null;
+        if (journey && journey.materias) {
+            const subject = journey.materias.find(m => (m.name || m.nome) === valMat);
+            if (subject && subject.topicos) {
+                subject.topicos.forEach(t => {
+                    const opt = document.createElement('option');
+                    opt.value = t;
+                    
+                    // CORTADOR DE CARACTERES
+                    opt.text = t.length > 50 ? t.substring(0, 50) + '...' : t;
+                    opt.title = t;
+
+                    selTop.insertBefore(opt, selTop.options[selTop.options.length - 1]);
+                    if (topParaSelecionar && t === topParaSelecionar) topEncontrado = true;
+                });
+            }
+        }
+    }
+
+    if (topParaSelecionar) {
+        if (topEncontrado || topParaSelecionar === 'Tópico Não Especificado') {
+            selTop.value = topParaSelecionar;
+        } else {
+            selTop.value = 'OUTRO';
+            inpTop.value = topParaSelecionar;
+            inpTop.style.display = 'block';
+        }
+    } else {
+        selTop.value = 'Tópico Não Especificado';
+        inpTop.style.display = 'none';
+    }
+};
+
+window.mudarTopicoEdicaoAcervo = function() {
+    const selTop = document.getElementById('edit-acervo-topico-select');
+    const inpTop = document.getElementById('edit-acervo-topico-input');
+    
+    if (selTop.value === 'OUTRO') {
+        inpTop.style.display = 'block';
+        if(!inpTop.value) inpTop.focus();
+    } else {
+        inpTop.style.display = 'none';
+    }
+};
+
+window.salvarEdicaoAcervo = function(idItem) {
+    const titulo = document.getElementById('edit-acervo-titulo').value.trim();
+    
+    const selJor = document.getElementById('edit-acervo-jornada-select');
+    const inpJor = document.getElementById('edit-acervo-jornada-input');
+    let jornada = selJor.value;
+    if (jornada === 'OUTRA') jornada = inpJor.value.trim() || 'Estudo Independente';
+
+    const selMat = document.getElementById('edit-acervo-materia-select');
+    const inpMat = document.getElementById('edit-acervo-materia-input');
+    let materia = selMat.value;
+    if (materia === 'OUTRA') materia = inpMat.value.trim() || 'Matéria Não Especificada';
+
+    const selTop = document.getElementById('edit-acervo-topico-select');
+    const inpTop = document.getElementById('edit-acervo-topico-input');
+    let topico = selTop.value;
+    if (topico === 'OUTRO') topico = inpTop.value.trim() || 'Tópico Não Especificado';
+    
+    if (!titulo) {
+        if(typeof showToast === 'function') showToast("O título não pode ficar vazio.", "warning");
+        return;
+    }
+
+    const email = localStorage.getItem('usuario_email');
+    if(typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal("Atualizando metadados na nuvem...");
+    
+    const modalEl = document.getElementById('modal-editar-acervo');
+    if (modalEl) bootstrap.Modal.getInstance(modalEl).hide();
+
+    google.script.run.withSuccessHandler(resp => {
+        if(typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
+        if(resp.success) {
+            if(typeof showToast === 'function') showToast("Material atualizado com sucesso!", "success");
+            if(typeof dispararAcaoGamificacao === 'function') dispararAcaoGamificacao('organizar_acervo');
+            window.carregarAcervoGlobal();
+        } else {
+            alert("Erro ao atualizar: " + resp.error);
+        }
+    }).atualizarMetadadosAcervoIA(email, idItem, titulo, jornada, materia, topico);
+};
+
+/* ==========================================================================
+   MODAL PREMIUM: FLASHCARDS INTERATIVOS (PERSONALIZAÇÃO POR BARALHO)
+   ========================================================================== */
+
+window.deckDataAtual = null;
+window.flashcardIndexAtual = 0;
+window.fcTamanhoAtual = 1.25;
+
+window.abrirModalFlashcardsInterativo = function(deckData, idCloud = null) {
+    window.deckDataAtual = deckData;
+    window.deckDataAtual.idCloud = idCloud;
+    window.flashcardIndexAtual = 0;
+    
+    // 🧠 LÊ O ESTILO ESPECÍFICO DESTE BARALHO (Ou cria o padrão se for novo)
+    if (!window.deckDataAtual.estilos) {
+        window.deckDataAtual.estilos = {
+            tema: 'tema-classic',
+            fonte: 'font-sans',
+            tamanho: 1.25
+        };
+    }
+    
+    const estiloDeck = window.deckDataAtual.estilos;
+    window.fcTamanhoAtual = estiloDeck.tamanho;
+    
+    let modal = document.getElementById('modal-ia-flashcards');
+    if (modal) modal.remove();
+
+    modal = document.createElement('div');
+    modal.id = 'modal-ia-flashcards';
+    modal.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15,23,42,0.9); z-index:10700; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(8px); padding:20px;';
+    document.body.appendChild(modal);
+
+    const isSaved = !!idCloud;
+    const btnSalvarHtml = isSaved ? '' : `
+        <button id="btn-salvar-flashcards" class="btn btn-warning fw-bold px-4 shadow-sm text-dark d-flex align-items-center gap-2 rounded-pill" onclick="window.salvarFlashcardsNoBanco()">
+            <i class="material-icons fs-5">save</i> Salvar Baralho
+        </button>
+    `;
+
+    modal.innerHTML = `
+    <style>
+        .fc-scene { perspective: 1000px; width: 100%; max-width: 600px; height: 350px; margin: 0 auto; }
+        .fc-card { width: 100%; height: 100%; position: relative; transition: transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1); transform-style: preserve-3d; cursor: pointer; }
+        .fc-card.is-flipped { transform: rotateY(180deg); }
+        .fc-face { width: 100%; height: 100%; position: absolute; backface-visibility: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2.5rem; border-radius: 1.5rem; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.1); border: 2px solid var(--border-color); transition: all 0.3s ease; }
+        .fc-back { transform: rotateY(180deg); }
+        .fc-badge { position: absolute; top: 1rem; right: 1.5rem; font-size: 0.75rem; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; opacity: 0.6; }
+
+        .tema-classic .fc-front { background: #ffffff; color: #1e293b; }
+        .tema-classic .fc-back { background: var(--primary); color: #ffffff; border-color: var(--primary); }
+
+        .tema-night .fc-front { background: #1e293b; color: #f8fafc; border-color: #334155; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        .tema-night .fc-back { background: #0f172a; color: #38bdf8; border-color: #38bdf8; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+
+        .tema-neon .fc-front { background: #050505; color: #39ff14; border-color: #39ff14; box-shadow: 0 0 20px rgba(57,255,20,0.2); }
+        .tema-neon .fc-back { background: #050505; color: #ff00ff; border-color: #ff00ff; box-shadow: 0 0 20px rgba(255,0,255,0.2); }
+
+        .tema-pastel .fc-front { background: #fff5f5; color: #52525b; border-color: #fecdd3; }
+        .tema-pastel .fc-back { background: #f0fdf4; color: #166534; border-color: #bbf7d0; }
+
+        .font-sans .fc-face { font-family: 'Inter', sans-serif; }
+        .font-serif .fc-face { font-family: 'Georgia', serif; }
+        .font-hand .fc-face { font-family: 'Comic Sans MS', 'Chalkboard SE', cursive; }
+        .font-dyslexic .fc-face { font-family: 'Verdana', sans-serif; letter-spacing: 1.5px; line-height: 1.7; }
+    </style>
+
+    <div style="background:#f8fafc; width:100%; max-width:850px; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.5); display:flex; flex-direction:column; overflow:hidden;">
+        
+        <div class="d-flex justify-content-between align-items-center p-4 border-bottom bg-white flex-wrap gap-3">
+            <div>
+                <span class="badge bg-warning text-dark mb-2 px-3 py-2 rounded-pill fw-bold shadow-sm"><i class="material-icons fs-6 align-middle me-1">style</i> Memorização Ativa</span>
+                <h4 class="fw-bold m-0" style="color: #1e293b;">${escapeHtml(deckData.titulo)}</h4>
+            </div>
+            
+            <div class="d-flex gap-2 align-items-center">
+                <select class="form-select form-select-sm shadow-sm rounded-pill fw-bold text-secondary" style="width: 140px; cursor: pointer;" onchange="window.aplicarEstiloFC('tema', this.value)">
+                    <option value="tema-classic" ${estiloDeck.tema === 'tema-classic' ? 'selected' : ''}>🎨 Clássico</option>
+                    <option value="tema-night" ${estiloDeck.tema === 'tema-night' ? 'selected' : ''}>🌙 Noturno</option>
+                    <option value="tema-neon" ${estiloDeck.tema === 'tema-neon' ? 'selected' : ''}>⚡ Cyberpunk</option>
+                    <option value="tema-pastel" ${estiloDeck.tema === 'tema-pastel' ? 'selected' : ''}>🌸 Pastel</option>
+                </select>
+                <select class="form-select form-select-sm shadow-sm rounded-pill fw-bold text-secondary" style="width: 140px; cursor: pointer;" onchange="window.aplicarEstiloFC('fonte', this.value)">
+                    <option value="font-sans" ${estiloDeck.fonte === 'font-sans' ? 'selected' : ''}>A- Moderna</option>
+                    <option value="font-serif" ${estiloDeck.fonte === 'font-serif' ? 'selected' : ''}>A- Livro</option>
+                    <option value="font-hand" ${estiloDeck.fonte === 'font-hand' ? 'selected' : ''}>A- Caneta</option>
+                    <option value="font-dyslexic" ${estiloDeck.fonte === 'font-dyslexic' ? 'selected' : ''}>A- Legível</option>
+                </select>
+                <div class="btn-group shadow-sm rounded-pill bg-white border">
+                    <button class="btn btn-sm btn-light text-primary border-0 rounded-start-pill px-3 fw-bold" onclick="window.ajustarTamanhoFC(-0.15)" title="Diminuir Texto">A-</button>
+                    <button class="btn btn-sm btn-light text-primary border-0 rounded-end-pill px-3 fw-bold" onclick="window.ajustarTamanhoFC(0.15)" title="Aumentar Texto">A+</button>
+                </div>
+            </div>
+
+            <button class="btn-close fs-5" onclick="document.getElementById('modal-ia-flashcards').remove();"></button>
+        </div>
+        
+        <div class="p-4 d-flex flex-column align-items-center position-relative" style="background: #f1f5f9; min-height: 420px;">
+            <div class="text-muted small fw-bold mb-3 d-flex align-items-center gap-2">
+                <i class="material-icons">touch_app</i> Clique no cartão para revelar a resposta
+            </div>
+            
+            <div id="fc-container-mestre" class="${estiloDeck.tema} ${estiloDeck.fonte} w-100 d-flex justify-content-center">
+                <div class="fc-scene" onclick="this.querySelector('.fc-card').classList.toggle('is-flipped')">
+                    <div class="fc-card" id="fc-card-element">
+                        <div class="fc-face fc-front">
+                            <span class="fc-badge" style="color: inherit;">Pergunta</span>
+                            <h4 class="fw-bold m-0" id="fc-frente" style="line-height: 1.4; font-size: ${estiloDeck.tamanho}rem;"></h4>
+                        </div>
+                        <div class="fc-face fc-back">
+                            <span class="fc-badge" style="color: inherit;">Resposta</span>
+                            <h5 class="fw-semibold m-0" id="fc-verso" style="line-height: 1.5; font-size: ${estiloDeck.tamanho}rem;"></h5>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="d-flex align-items-center justify-content-center gap-4 mt-4 w-100" style="max-width: 600px;">
+                <button class="btn btn-light shadow-sm rounded-circle d-flex align-items-center justify-content-center border" style="width: 50px; height: 50px; transition: 0.2s;" onclick="window.navegarFlashcard(-1)" onmouseover="this.classList.add('bg-primary', 'text-white')" onmouseout="this.classList.remove('bg-primary', 'text-white')">
+                    <i class="material-icons fs-4">arrow_back_ios_new</i>
+                </button>
+                <div class="fw-bold text-secondary bg-white px-4 py-2 rounded-pill shadow-sm border" style="font-size: 1.1rem; min-width: 120px; text-align: center;">
+                    <span id="fc-contador" class="text-primary fs-5">1</span> / <span id="fc-total">10</span>
+                </div>
+                <button class="btn btn-light shadow-sm rounded-circle d-flex align-items-center justify-content-center border" style="width: 50px; height: 50px; transition: 0.2s;" onclick="window.navegarFlashcard(1)" onmouseover="this.classList.add('bg-primary', 'text-white')" onmouseout="this.classList.remove('bg-primary', 'text-white')">
+                    <i class="material-icons fs-4">arrow_forward_ios</i>
+                </button>
+            </div>
+        </div>
+
+        <div class="p-3 border-top bg-white d-flex justify-content-center align-items-center">
+            ${btnSalvarHtml}
+        </div>
+    </div>`;
+
+    window.renderizarFlashcardAtual();
+};
+
+window.aplicarEstiloFC = function(tipo, valor) {
+    const container = document.getElementById('fc-container-mestre');
+    if (!container || !window.deckDataAtual) return;
+    
+    if (tipo === 'tema') {
+        container.classList.remove('tema-classic', 'tema-night', 'tema-neon', 'tema-pastel');
+        container.classList.add(valor);
+        window.deckDataAtual.estilos.tema = valor;
+    } else if (tipo === 'fonte') {
+        container.classList.remove('font-sans', 'font-serif', 'font-hand', 'font-dyslexic');
+        container.classList.add(valor);
+        window.deckDataAtual.estilos.fonte = valor;
+    }
+
+    // Aciona a sincronização em background segura
+    window.dispararSalvamentoFantasmaBaralho();
+};
+
+window.fcSizeTimeout = null;
+window.ajustarTamanhoFC = function(step) {
+    if (!window.deckDataAtual) return;
+
+    window.fcTamanhoAtual += step;
+    if (window.fcTamanhoAtual < 0.8) window.fcTamanhoAtual = 0.8; 
+    if (window.fcTamanhoAtual > 2.5) window.fcTamanhoAtual = 2.5; 
+    
+    document.getElementById('fc-frente').style.fontSize = window.fcTamanhoAtual + 'rem';
+    document.getElementById('fc-verso').style.fontSize = window.fcTamanhoAtual + 'rem';
+    
+    window.deckDataAtual.estilos.tamanho = window.fcTamanhoAtual;
+
+    // Aciona a sincronização em background segura
+    window.dispararSalvamentoFantasmaBaralho();
+};
+
+window.renderizarFlashcardAtual = function() {
+    const cardEl = document.getElementById('fc-card-element');
+    if(cardEl) cardEl.classList.remove('is-flipped'); 
+
+    setTimeout(() => {
+        const c = window.deckDataAtual.cartoes[window.flashcardIndexAtual];
+        const pFrente = document.getElementById('fc-frente');
+        const pVerso = document.getElementById('fc-verso');
+        
+        pFrente.innerText = c.frente;
+        pVerso.innerText = c.verso;
+        
+        // Mantém a consistência visual da escala de fonte salva
+        pFrente.style.fontSize = window.fcTamanhoAtual + 'rem';
+        pVerso.style.fontSize = window.fcTamanhoAtual + 'rem';
+
+        document.getElementById('fc-contador').innerText = window.flashcardIndexAtual + 1;
+        document.getElementById('fc-total').innerText = window.deckDataAtual.cartoes.length;
+    }, 200); 
+};
+
+window.navegarFlashcard = function(direcao) {
+    const total = window.deckDataAtual.cartoes.length;
+    window.flashcardIndexAtual += direcao;
+    
+    if (window.flashcardIndexAtual < 0) window.flashcardIndexAtual = total - 1;
+    if (window.flashcardIndexAtual >= total) window.flashcardIndexAtual = 0;
+    
+    window.renderizarFlashcardAtual();
+};
+
+window.salvarFlashcardsNoBanco = function() {
+    if (!window.deckDataAtual) return;
+    const email = localStorage.getItem('usuario_email');
+    if (!email) { alert("Faça login para salvar."); return; }
+
+    // Detecta se já existe uma ID na nuvem para saber se é uma atualização ou inserção nova
+    const isUpdate = !!window.deckDataAtual.idCloud;
+    const id = window.deckDataAtual.idCloud || ('flash-' + Date.now());
+    window.deckDataAtual.idCloud = id;
+    
+    if (!isUpdate && !window.deckDataAtual.contexto) {
+        window.deckDataAtual.contexto = obterContextoEstudoAtual();
+    }
+
+    if (typeof mostrarLoaderGlobal === 'function') {
+        mostrarLoaderGlobal(isUpdate ? "A atualizar o seu Baralho..." : "A arquivar o seu Baralho...");
+    }
+
+    const executarGravacaoFisica = function() {
+        google.script.run.withSuccessHandler(resp => {
+            if(typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
+            if(resp.success) {
+                const btnSave = document.getElementById('btn-salvar-flashcards');
+                if(btnSave && !isUpdate) btnSave.remove();
+                
+                if(typeof showToast === 'function') {
+                    showToast(isUpdate ? "Baralho atualizado com sucesso!" : "Baralho salvo no seu Acervo com o Contexto atual!", "success");
+                }
+                window.carregarAcervoGlobal();
+            } else {
+                alert("Erro da Nuvem: " + resp.error);
+            }
+        }).salvarMaterialIABanco(email, id, 'flashcards', window.deckDataAtual.titulo, window.deckDataAtual);
+    };
+
+    // Se for uma atualização, limpa o registro antigo antes de injetar o novo estado
+    if (isUpdate) {
+        google.script.run.withSuccessHandler(() => {
+            executarGravacaoFisica();
+        }).excluirMaterialIABanco(email, id);
+    } else {
+        executarGravacaoFisica();
+    }
+};
+
+window.fcSaveTimeout = null;
+window.dispararSalvamentoFantasmaBaralho = function() {
+    const email = localStorage.getItem('usuario_email');
+    if (!email || !window.deckDataAtual || !window.deckDataAtual.idCloud) return;
+
+    // DEBOUNCE ANTI-TRAVAMENTO: Cancela qualquer requisição de salvamento anterior que ainda esteja na fila
+    clearTimeout(window.fcSaveTimeout);
+    
+    // Agenda o salvamento definitivo para 1 segundo após o último clique do usuário
+    window.fcSaveTimeout = setTimeout(() => {
+        console.log("🔄 Sincronizando personalização no mesmo registro (ID: " + window.deckDataAtual.idCloud + ")...");
+        
+        // 1. Elimina a linha antiga da planilha correspondente a este ID
+        google.script.run.withSuccessHandler(() => {
+            // 2. Grava os novos estilos mantendo RIGOROSAMENTE o mesmo ID original
+            google.script.run.withSuccessHandler(resp => {
+                if(resp.success) {
+                    console.log("✅ Registro atualizado em background sem duplicações.");
+                    
+                    // 3. Atualiza o cache do acervo na memória local silenciosamente
+                    google.script.run.withSuccessHandler(respGlobal => {
+                        if(respGlobal.success) window.acervoIA_Cache = respGlobal.itens;
+                    }).carregarAcervoIABanco(email);
+                }
+            }).salvarMaterialIABanco(email, window.deckDataAtual.idCloud, 'flashcards', window.deckDataAtual.titulo, window.deckDataAtual);
+        }).excluirMaterialIABanco(email, window.deckDataAtual.idCloud);
+        
+    }, 1000);
+};
+
 </script>
