@@ -131,17 +131,99 @@ html, body {
 .avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--grad-orange); display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-sm); transition: transform var(--transition-fast); }
 .avatar:hover { transform: scale(1.05); }
 
+/* Header Elements Integrados */
+.gamification-header {
+  background: rgba(255, 255, 255, 0.8) !important;
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(226, 232, 240, 0.8) !important;
+  transition: all 0.2s ease;
+}
+.gamification-header:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md) !important;
+  border-color: var(--primary) !important;
+}
+
 /* --------------------------------------------------------------------------
    MÓDULO 5: DASHBOARD, GAMIFICAÇÃO & ATALHOS VIBRANTES
    -------------------------------------------------------------------------- */
+
+/* Saudação com Gradiente Moderno e Emoji Preservado */
+#dash-greeting {
+  font-size: 2.2rem;
+  margin-bottom: 0.25rem;
+  color: var(--text-main); /* Cor base para o emoji e textos sem gradiente */
+}
+
+.texto-gradiente-roxo {
+  background: linear-gradient(135deg, #1e1b4b 0%, #4338ca 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+[data-theme="dark"] .texto-gradiente-roxo {
+  background: linear-gradient(135deg, #f8fafc 0%, #818cf8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Animação suave de entrada para a Dashboard inteira */
+#dashboard-view {
+  animation: fadeInLayout 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes fadeInLayout {
+  from { opacity: 0; transform: translateY(15px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 /* Gamificação Progress Cards */
 .progress-card { background: var(--bg-card); border-color: var(--border-color); transition: transform var(--transition-fast), box-shadow var(--transition-fast); }
 .progress-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
 
 /* Grade de Ferramentas (Atalhos) */
 .tools-vibrant-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.5rem; }
-.vibrant-tool-card { border-radius: var(--radius-lg); padding: 1.5rem; display: flex; align-items: flex-start; gap: 1rem; cursor: pointer; color: var(--text-light); transition: transform var(--transition-fast), box-shadow var(--transition-fast); border: none; }
-.vibrant-tool-card:hover { transform: translateY(-5px); box-shadow: var(--shadow-vibrant) !important; }
+
+/* Transformação dos Cards de Atalho (Efeito de Profundidade Elevada) */
+.vibrant-tool-card {
+  display: flex; 
+  align-items: flex-start; 
+  gap: 1rem; 
+  cursor: pointer; 
+  color: var(--text-light); 
+  border: none;
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  padding: 1.75rem;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), 
+              box-shadow 0.3s ease, 
+              filter 0.3s ease;
+}
+
+/* Efeito de Brilho Dinâmico ao passar o mouse */
+.vibrant-tool-card::before {
+  content: '';
+  position: absolute;
+  top: -50%; left: -50%;
+  width: 200%; height: 200%;
+  background: linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent);
+  transform: rotate(45deg);
+  transition: 0.5s;
+  opacity: 0;
+}
+
+.vibrant-tool-card:hover::before {
+  opacity: 1;
+  top: -20%; left: -20%;
+}
+
+.vibrant-tool-card:hover {
+  transform: translateY(-6px) scale(1.02);
+  box-shadow: var(--shadow-vibrant) !important;
+}
+
 .vibrant-icon { width: 50px; height: 50px; background: rgba(255,255,255,0.2); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; backdrop-filter: blur(5px); }
 .vibrant-info h5 { font-weight: 700; margin: 0 0 0.25rem 0; font-size: 1.1rem; }
 .vibrant-info p { font-size: 0.85rem; margin: 0; opacity: 0.9; line-height: 1.3; }
@@ -208,9 +290,12 @@ html, body {
 .quiz-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 24px; margin-bottom: 20px; box-shadow: var(--shadow-sm); }
 .quiz-option { padding: 12px 16px; background: var(--bg-input); border: 2px solid var(--border-color); border-radius: var(--radius-sm); margin-bottom: 8px; cursor: pointer; display: flex; align-items: center; transition: var(--transition-fast); font-weight: 500; color: var(--text-main); }
 .quiz-option:hover { border-color: var(--text-muted); background: var(--bg-hover); }
-.quiz-option.show-correct { background: rgba(16, 185, 129, 0.1); border-color: var(--success); color: var(--success); }
-.quiz-option.selected-wrong { background: rgba(239, 68, 68, 0.1); border-color: var(--danger); color: var(--danger); }
+.quiz-option.show-correct { background: rgba(16, 185, 129, 0.1) !important; border-color: var(--success) !important; color: var(--success) !important; }
+.quiz-option.selected-wrong { background: rgba(239, 68, 68, 0.1) !important; border-color: var(--danger) !important; color: var(--danger) !important; }
 .quiz-feedback { margin-top: 15px; padding: 15px; background: var(--bg-active); border-radius: var(--radius-sm); border-left: 4px solid var(--primary); display: none; color: var(--text-main); }
+
+/* Print Preview Container Fix (Para PDF Aluno e Professor renderizarem corretamente) */
+#print-content-wrapper { width: 100%; max-width: 100%; margin: 0 auto; overflow-x: hidden; word-wrap: break-word; }
 
 /* Leitor Imersivo (TTS) */
 #modal-leitor-imersivo { z-index: 10700; backdrop-filter: blur(10px); background: rgba(15, 23, 42, 0.95); }
@@ -228,9 +313,11 @@ html, body {
 .dropdown-item { color: var(--text-main); transition: var(--transition-fast); }
 .dropdown-item:hover { background-color: var(--bg-hover); color: var(--primary); }
 .modal-content { background-color: var(--bg-card); color: var(--text-main); border-color: var(--border-color); }
-.nav-pills .nav-link { color: var(--text-muted); border-radius: var(--radius-sm); transition: var(--transition-fast); }
-.nav-pills .nav-link:hover { background-color: var(--bg-hover); }
-.nav-pills .nav-link.active { background-color: var(--bg-active); color: var(--primary); }
+
+/* Melhorias nas Nav Pills (Usadas no Admin e Configurações) */
+.nav-pills .nav-link { color: var(--text-muted); border-radius: var(--radius-md); transition: var(--transition-fast); border: 1px solid transparent; }
+.nav-pills .nav-link:hover { background-color: var(--bg-hover); border-color: var(--border-color); }
+.nav-pills .nav-link.active { background-color: var(--primary); color: #ffffff !important; border-color: var(--primary); box-shadow: var(--shadow-sm); }
 
 /* ==========================================================================
    ANIMAÇÕES DA MESA DE ESTUDOS (Empty State)
@@ -241,9 +328,8 @@ html, body {
   100% { transform: translateY(0px); filter: drop-shadow(0 2px 4px rgba(59,130,246,0.1)); }
 }
 
-/* CORREÇÃO: Aplicar a animação ao wrapper (div) que é um bloco, não ao <i> que é texto inline */
 .floating-icon { 
-  display: inline-block; /* Obriga o navegador a respeitar o transform */
+  display: inline-block; 
   animation: float-icon 3s ease-in-out infinite; 
 }
 
@@ -252,7 +338,6 @@ html, body {
   border: 2px dashed var(--border-color);
 }
 
-/* NOVO: Animação de pulso contínuo para o botão chamar a atenção */
 @keyframes pulse-soft {
   0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
   70% { box-shadow: 0 0 0 12px rgba(59, 130, 246, 0); }
@@ -261,19 +346,19 @@ html, body {
 
 .pulse-btn-add { 
   transition: all var(--transition-fast); 
-  animation: pulse-soft 2.5s infinite; /* Pulsa infinitamente */
+  animation: pulse-soft 2.5s infinite; 
 }
 
 .pulse-btn-add:hover { 
   transform: scale(1.05); 
   border-color: var(--primary) !important; 
   color: var(--primary) !important;
-  animation: none; /* Para de pulsar quando o rato está por cima */
+  animation: none; 
   box-shadow: var(--shadow-md) !important;
 }
 
 /* ==========================================================================
-   ANIMAÇÕES DE GAMIFICAÇÃO (XP & TAREFAS)
+   ANIMAÇÕES DE GAMIFICAÇÃO (XP, TAREFAS E AVATARES)
    ========================================================================== */
 .xp-popup {
   position: fixed;
@@ -311,5 +396,223 @@ html, body {
   60% { transform: scale(0.9) translateY(5px) rotate(10deg); }
   80% { transform: scale(1.1) translateY(-5px); }
 }
+
+/* ==========================================================================
+   PAINEL DE ADMINISTRAÇÃO (TABELAS E ESTRUTURAS)
+   ========================================================================== */
+
+#admin-view .table th {
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.5px;
+  border-bottom: 2px solid var(--border-color);
+  background-color: var(--bg-hover);
+  color: var(--text-muted);
+}
+
+#admin-view .table td {
+  font-size: 0.9rem;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-main);
+}
+
+#admin-view .table-hover tbody tr {
+  transition: background-color 0.2s ease;
+}
+
+#admin-view .table-hover tbody tr:hover {
+  background-color: rgba(59, 130, 246, 0.04);
+}
+
+#menu-item-admin {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+#admin-view .card {
+  border: 1px solid var(--border-color) !important;
+}
+
+/* Tab Animations no Admin */
+.tab-content > .tab-pane {
+  display: none;
+}
+.tab-content > .active {
+  display: block;
+  animation: fadeInTab 0.3s ease-in-out forwards;
+}
+
+@keyframes fadeInTab {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ==========================================================================
+   PAINEL MOODICAS (BALÃO E VAQUINHA FLUTUANTE)
+   ========================================================================== */
+
+.moodicas-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  z-index: 1050;
+  margin-right: 10px;
+}
+
+.moodicas-balao {
+  position: absolute;
+  right: 55px; 
+  top: 50%;
+  background: linear-gradient(135deg, var(--bg-card), var(--bg-input));
+  border: 2px solid var(--primary);
+  border-radius: 14px;
+  padding: 10px 16px;
+  width: max-content;
+  max-width: 280px;
+  font-size: 0.85rem;
+  color: var(--text-main);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-50%) translateX(10px) scale(0.95);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 1000;
+  pointer-events: none;
+  box-shadow: var(--shadow-lg);
+}
+
+.moodicas-balao.show {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(-50%) translateX(0) scale(1);
+}
+
+.moodicas-balao::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -10px;
+  transform: translateY(-50%);
+  border-width: 8px 0 8px 10px;
+  border-style: solid;
+  border-color: transparent transparent transparent var(--primary);
+}
+
+.moodicas-img {
+  animation: float-cow 3s ease-in-out infinite;
+  transition: transform 0.3s;
+}
+
+.moodicas-img:hover {
+  transform: scaleX(-1) scale(1.15) rotate(-5deg) !important;
+}
+
+@keyframes float-cow {
+  0% { transform: scaleX(-1) translateY(0px); }
+  50% { transform: scaleX(-1) translateY(-6px); filter: drop-shadow(0 5px 5px rgba(59,130,246,0.2)); }
+  100% { transform: scaleX(-1) translateY(0px); }
+}
+
+/* ==========================================================================
+   UTILITÁRIOS E MISC
+   ========================================================================== */
+.font-monospace {
+  font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.transition-hover {
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.transition-hover:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md) !important;
+}
+
+/* ==========================================================================
+   ANIMAÇÃO DE GATING CARD: PULSO SUTIL (EXISTENTE CORRIGIDA)
+   ========================================================================== */
+@keyframes gatingCardPulse {
+  0% {
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+    border-color: rgba(67, 56, 202, 0); /* var(--bg-primary) totalmente transparente */
+  }
+  50% {
+    box-shadow: 0 10px 45px rgba(67, 56, 202, 0.15); /* Brilho suave da paleta */
+    border-color: rgba(67, 56, 202, 0.2); /* Borda visível mas suave */
+  }
+  100% {
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+    border-color: rgba(67, 56, 202, 0);
+  }
+}
+
+.gating-pulse-gating-card .login-card {
+  border: 3px solid transparent; /* Garante que a borda só apareça na animação */
+  animation: gatingCardPulse 5s infinite ease-in-out; /* Pulsa suavemente a cada 5 segundos */
+  transition: all 0.5s ease; /* Suaviza as mudanças de estado */
+}
+
+/* Efeito de foco mais tático para os campos de input */
+.input-group input:focus {
+  border-color: rgba(67, 56, 202, 1); /* Borda roxa da paleta */
+  box-shadow: 0 0 0 4px rgba(67, 56, 202, 0.1); /* Brilho de foco suave */
+}
+
+/* ==========================================================================
+   MOTOR DE PARTÍCULAS CSS: CENTELHAS TRANSLÚCIDAS AO REDOR DO CARD
+   ========================================================================== */
+
+/* Container para garantir que fiquem atrás do card (z-1) */
+.moogia-particle-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1; /* Atrás do login-card (z-2) */
+    pointer-events: none; /* Garante que não interfiram nos cliques */
+}
+
+/* Estilo base das partículas (pequenas centelhas desfocadas) */
+.moogia-particle {
+    position: absolute;
+    border-radius: 50%;
+    /* Cor base: Branco translúcido com brilho roxo (ajuste conforme paleta) */
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.8) 0%, rgba(67, 56, 202, 0.2) 100%);
+    opacity: 0;
+    filter: blur(2px); /* Efeito de desfoque para suavizar e integrar */
+    animation: moogiaParticleFloat 10s infinite linear;
+}
+
+/* @keyframes: Flutuar para cima, girar sutilmente e sumir (fade-out) */
+@keyframes moogiaParticleFloat {
+    0% {
+        transform: translateY(0) rotate(0deg) scale(1);
+        opacity: 0;
+    }
+    10% {
+        opacity: 0.7; /* Aparece rápido */
+    }
+    80% {
+        opacity: 0.7; /* Mantém visível */
+    }
+    100% {
+        transform: translateY(-200px) rotate(360deg) scale(1.5); /* Sobe e cresce */
+        opacity: 0; /* Some suavemente */
+    }
+}
+
+/* Randomizando as partículas: Posição, Tamanho e Tempo */
+/* Ajustados para "nascer" sutilmente ao redor/atrás do login-card */
+
+.moogia-particle.p1 { width: 10px; height: 10px; bottom: 25%; left: 30%; animation-delay: 0s; animation-duration: 12s; }
+.moogia-particle.p2 { width: 15px; height: 15px; bottom: 20%; right: 25%; animation-delay: 2s; animation-duration: 9s; }
+.moogia-particle.p3 { width: 8px; height: 8px; bottom: 15%; left: 40%; animation-delay: 4s; animation-duration: 15s; background: rgba(165, 180, 252, 0.3); } /* Tom mais claro */
+.moogia-particle.p4 { width: 12px; height: 12px; bottom: 30%; right: 35%; animation-delay: 6s; animation-duration: 10s; }
+.moogia-particle.p5 { width: 6px; height: 6px; bottom: 10%; left: 50%; animation-delay: 1s; animation-duration: 18s; }
+.moogia-particle.p6 { width: 18px; height: 18px; bottom: 28%; left: 20%; animation-delay: 3s; animation-duration: 11s; background: rgba(67, 56, 202, 0.25); } /* Tom mais roxo */
+.moogia-particle.p7 { width: 9px; height: 9px; bottom: 18%; right: 45%; animation-delay: 5s; animation-duration: 13s; }
+.moogia-particle.p8 { width: 14px; height: 14px; bottom: 22%; left: 60%; animation-delay: 7s; animation-duration: 10s; }
 
 </style>
