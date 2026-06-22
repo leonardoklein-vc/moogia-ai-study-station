@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Estação de Estudos IA</title>
+  
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+
+  <?!= HtmlService.createHtmlOutputFromFile('style').getContent(); ?>
+
+  <style>
+    .moodicas-container {
+      position: relative;
+      display: flex;
+      align-items: center;
+      margin-right: 10px;
+      cursor: pointer;
+    }
+    
+    .moodicas-balao {
+      position: absolute;
+      right: 50px; /* Coloca o balão à esquerda da vaquinha */
+      top: 50%;
+      background: linear-gradient(135deg, var(--bg-card), var(--bg-input));
+      border: 2px solid var(--primary);
+      border-radius: 16px 16px 0 16px;
+      padding: 10px 16px;
+      width: max-content;
+      max-width: 280px;
+      font-size: 0.85rem;
+      color: var(--text-main);
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(-50%) translateX(15px) scale(0.9);
+      transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+      z-index: 1000;
+      pointer-events: none;
+      box-shadow: var(--shadow-md);
+    }
+    
+    .moodicas-balao.show {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(-50%) translateX(0) scale(1);
+    }
+    
+    /* O biquinho do balão apontando para a vaquinha */
+    .moodicas-balao::after {
+      content: '';
+      position: absolute;
+      bottom: -2px;
+      right: -10px;
+      border-width: 10px 0 0 12px;
+      border-style: solid;
+      border-color: transparent transparent transparent var(--primary);
+    }
+    
+    .moodicas-img {
+      animation: float-cow 3s ease-in-out infinite;
+      transition: transform 0.3s;
+    }
+    
+    .moodicas-img:hover {
+      /* Espelha e dá um leve salto no hover */
+      transform: scaleX(-1) scale(1.15) rotate(-5deg) !important;
+    }
+    
+    @keyframes float-cow {
+      0% { transform: scaleX(-1) translateY(0px); }
+      50% { transform: scaleX(-1) translateY(-6px); filter: drop-shadow(0 5px 5px rgba(59,130,246,0.2)); }
+      100% { transform: scaleX(-1) translateY(0px); }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="init-loader" style="position:fixed; top:0; left:0; width:100vw; height:100vh; background:#ffffff; z-index:9999; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+    <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status"></div>
+    <p class="mt-3 text-muted">A preparar a estação de estudos...</p>
+  </div>
+
+  <div id="login-view" class="login-wrapper">
+    <div class="login-card shadow-lg">
+      <div class="text-center mb-4">
+        <div class="login-icon mb-3">
+          <i class="material-icons" style="font-size: 48px; color: #fff;">school</i>
+        </div>
+        <h3 class="fw-bold text-dark">Estação de Estudos IA</h3>
+        <p class="text-muted small">Entre para aceder ao seu ambiente de aprendizagem</p>
+      </div>
+      
+      <form onsubmit="fazerLoginReal(event)">
+        <div class="mb-3">
+          <label class="form-label text-secondary fw-bold small">E-mail</label>
+          <div class="input-group">
+            <span class="input-group-text bg-light border-end-0">
+              <i class="material-icons text-muted" style="font-size: 18px;">email</i>
+            </span>
+            <input type="email" id="login-email" class="form-control border-start-0 bg-light" placeholder="estudante@email.com" required>
+          </div>
+        </div>
+
+        <div class="mb-4">
+          <label class="form-label text-secondary fw-bold small">Palavra-passe</label>
+          <div class="input-group">
+            <span class="input-group-text bg-light border-end-0">
+              <i class="material-icons text-muted" style="font-size: 18px;">lock</i>
+            </span>
+            <input type="password" id="login-senha" class="form-control border-start-0 bg-light" placeholder="••••••••" required>
+          </div>
+        </div>
+
+        <button type="submit" id="btn-login-submit" class="btn btn-primary w-100 fw-bold py-2 shadow-sm d-flex align-items-center justify-content-center" style="background: linear-gradient(135deg, #4f46e5, #7c3aed); border: none;">
+          Entrar na Estação
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div id="app-layout" class="app-layout" style="display: none;">
+    
+    <aside class="app-sidebar" style="overflow-y: auto;">
+      <div class="sidebar-brand">
+        <img src="https://i.ibb.co/5WHfDf0R/vaquinha.png" alt="Logo MoogIA" style="width: 40px; height: 40px; margin-right: 10px; object-fit: contain;">
+        <span class="fw-bold fs-5">MoogIA</span>
+      </div>
+      
+      <nav class="sidebar-nav">
+        <a href="#" class="nav-item active" onclick="mostrarView('dashboard-view')">
+          <i class="material-icons">dashboard</i> Painel Principal
+        </a>
+        <a href="#" class="nav-item text-primary" style="background: #eff6ff;" onclick="mostrarView('pdf-studio-view')">
+          <i class="material-icons text-primary">build_circle</i> Mesa de Estudos
+        </a>
+        
+        <hr class="my-3 opacity-25">
+        
+        <a href="#" class="nav-item" onclick="mostrarView('resumos-view')">
+          <i class="material-icons">folder_special</i> Meus Resumos
+        </a>
+        <a href="#" class="nav-item" onclick="mostrarView('quiz-view')">
+          <i class="material-icons">quiz</i> Questionários
+        </a>
+        <a href="#" class="nav-item" onclick="mostrarView('mapas-view')">
+          <i class="material-icons">account_tree</i> Mapas Mentais
+        </a>
+        <a href="#" class="nav-item" onclick="mostrarView('cartoes-view')">
+          <i class="material-icons">style</i> Cartões (Flashcards)
+        </a>
+        
+        <hr class="my-3 opacity-25">
+        
+        <a href="#" class="nav-item fw-bold text-primary" style="background: #eff6ff;" onclick="mostrarView('jornadas-view')">
+          <i class="material-icons text-primary">route</i> Minhas Jornadas
+        </a>
+        <a href="#" class="nav-item" onclick="mostrarView('agenda-view')">
+          <i class="material-icons">calendar_month</i> Agenda Inteligente
+        </a>
+        <a href="#" class="nav-item" onclick="mostrarView('tecnicas-view')">
+          <i class="material-icons">menu_book</i> Técnicas
+        </a>
+      </nav>
+      
+      <div class="sidebar-footer mt-auto pt-4">
+        <a href="#" class="nav-item text-danger" onclick="fazerLogout()">
+          <i class="material-icons">logout</i> Terminar Sessão
+        </a>
+      </div>
+    </aside>
+
+    <main class="app-main" style="position: relative;">
+      
+      <header class="app-header d-flex justify-content-between align-items-center mb-4">
+        
+        <div class="search-bar">
+          <i class="material-icons text-muted">search</i>
+          <input type="text" id="global-search-input" placeholder="Pesquisar nos seus materiais e resumos...">
+        </div>
+        
+        <div class="gamification-header d-flex align-items-center gap-3 ms-4 me-auto px-3 py-1 bg-light rounded-pill border shadow-sm cursor-pointer" title="A sua evolução atual" onclick="mostrarView('agenda-view')">
+          <img src="https://i.ibb.co/5WHfDf0R/vaquinha.png" id="vaquinha-avatar-header" alt="Mascote" style="width: 28px; height: 28px; object-fit: contain;">
+          <div class="d-flex flex-column" style="width: 140px;">
+            <div class="d-flex justify-content-between align-items-center mb-1" style="line-height: 1;">
+              <span class="small fw-bold text-dark" style="font-size: 11px;">Nível <span id="global-level-text">1</span></span>
+              <span class="small text-muted" style="font-size: 10px;" id="global-xp-text">0 / 100 XP</span>
+            </div>
+            <div class="progress" style="height: 6px; border-radius: 10px; background-color: #e2e8f0;">
+              <div class="progress-bar bg-warning progress-bar-striped progress-bar-animated" id="global-xp-bar" style="width: 0%; transition: width 0.5s ease-out;"></div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="user-profile d-flex align-items-center gap-3">
+          
+          <div class="moodicas-container" onclick="forcarNovaMooDica()" title="Clique para receber uma dica!">
+            <div id="moodicas-balao" class="moodicas-balao">
+              <span id="moodicas-texto">Muuuu! Preparado para estudar?</span>
+            </div>
+            <img src="https://i.ibb.co/5WHfDf0R/vaquinha.png" alt="MooDicas" class="moodicas-img" style="width: 45px; height: 45px; object-fit: contain; transform: scaleX(-1);">
+          </div>
+
+          <button class="btn btn-light rounded-circle p-2 shadow-sm border-0 d-flex align-items-center justify-content-center" data-bs-toggle="modal" data-bs-target="#modalConfiguracoes" title="Configurações Gerais">
+            <i class="material-icons text-muted">settings</i>
+          </button>
+          
+          <button class="btn btn-light rounded-circle p-2 position-relative shadow-sm border-0 d-flex align-items-center justify-content-center" title="Notificações">
+            <i class="material-icons text-muted">notifications</i>
+            <span id="notif-badge" class="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle d-none"></span>
+          </button>
+          
+          <div class="dropdown">
+            <div class="avatar shadow-sm dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" style="cursor: pointer;">
+              <i class="material-icons text-white">person</i>
+            </div>
+            <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0 rounded-3 mt-2">
+              <li class="px-3 py-2 border-bottom mb-1">
+                <span class="d-block fw-bold text-dark small" id="user-menu-name">Estudante</span>
+                <span class="d-block text-muted" style="font-size: 11px;">Membro Ativo</span>
+              </li>
+              <li><a class="dropdown-item d-flex align-items-center gap-2 small text-secondary py-2" href="#"><i class="material-icons fs-6">account_circle</i> Meu Perfil</a></li>
+              <li><a class="dropdown-item d-flex align-items-center gap-2 small text-secondary py-2" href="#" data-bs-toggle="modal" data-bs-target="#modalConfiguracoes"><i class="material-icons fs-6">settings</i> Preferências</a></li>
+              <li><hr class="dropdown-divider"></li>
+              <li><a class="dropdown-item d-flex align-items-center gap-2 small text-danger py-2" href="#" onclick="fazerLogout()"><i class="material-icons fs-6">logout</i> Sair</a></li>
+            </ul>
+          </div>
+
+        </div>
+      </header>
+
+      <div id="dashboard-view">
+        <div class="d-flex justify-content-between align-items-end mb-4">
+          <div>
+            <h2 class="fw-bold text-dark mb-1" id="dash-greeting">Olá, Estudante! 👋</h2>
+            <p class="text-muted m-0">Pronto para atingir os seus objetivos diários?</p>
+          </div>
+        </div>
+
+        <div class="row g-4 mb-5" id="dash-gamification-cards">
+          <div class="col-md-4">
+            <div class="progress-card bg-white shadow-sm rounded-4 p-4 border h-100">
+              <h6 class="fw-bold text-secondary mb-3"><i class="material-icons align-middle text-warning me-1">local_fire_department</i> Sequência Atual</h6>
+              <h2 class="fw-bold text-dark m-0" id="dash-streak-days">0 Dias</h2>
+              <p class="small text-muted m-0 mt-1" id="dash-streak-sub">Inicie uma nova sessão de estudos hoje.</p>
+            </div>
+          </div>
+          <div class="col-md-8">
+            <div class="progress-card bg-white shadow-sm rounded-4 p-4 border h-100 d-flex flex-column justify-content-center">
+              <div class="d-flex justify-content-between align-items-end mb-2">
+                <h6 class="fw-bold text-secondary m-0">Objetivo Diário de Interação (IA)</h6>
+                <span class="fw-bold text-primary" id="dash-xp-text">0 / 1.000 pts</span>
+              </div>
+              <div class="progress" style="height: 12px; border-radius: 10px; background-color: #e2e8f0;">
+                <div class="progress-bar" id="dash-xp-bar" role="progressbar" style="width: 0%; background: linear-gradient(90deg, #3b82f6, #8b5cf6); border-radius: 10px;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <h5 class="fw-bold text-dark mb-3">Atalhos da Estação</h5>
+        <div class="tools-vibrant-grid mb-5">
+          <div class="vibrant-tool-card bg-blue shadow-sm" onclick="abrirFerramenta('chat')">
+            <div class="vibrant-icon"><i class="material-icons">forum</i></div>
+            <div class="vibrant-info">
+              <h5>Copiloto IA</h5>
+              <p>Converse e tire dúvidas com os seus materiais.</p>
+            </div>
+          </div>
+          <div class="vibrant-tool-card bg-purple shadow-sm" onclick="abrirFerramenta('summarize')">
+            <div class="vibrant-icon"><i class="material-icons">auto_awesome</i></div>
+            <div class="vibrant-info">
+              <h5>Resumir Matéria</h5>
+              <p>Sínteses e resumos didáticos instantâneos.</p>
+            </div>
+          </div>
+          <div class="vibrant-tool-card bg-pink shadow-sm" onclick="abrirFerramenta('mindmap')">
+            <div class="vibrant-icon"><i class="material-icons">account_tree</i></div>
+            <div class="vibrant-info">
+              <h5>Mapas Mentais</h5>
+              <p>Gere diagramas visuais baseados nos textos.</p>
+            </div>
+          </div>
+          <div class="vibrant-tool-card bg-green shadow-sm" onclick="abrirFerramenta('quiz_generator')">
+            <div class="vibrant-icon"><i class="material-icons">quiz</i></div>
+            <div class="vibrant-info">
+              <h5>Simulados IA</h5>
+              <p>Gere questões para testar os seus conhecimentos.</p>
+            </div>
+          </div>
+          <div class="vibrant-tool-card bg-orange shadow-sm" onclick="abrirFerramenta('read_pdf')">
+            <div class="vibrant-icon"><i class="material-icons">record_voice_over</i></div>
+            <div class="vibrant-info">
+              <h5>Leitor Imersivo</h5>
+              <p>Ouça os textos para melhorar a retenção.</p>
+            </div>
+          </div>
+        </div>
+
+        <h5 class="fw-bold text-dark mb-3">Materiais Recentes</h5>
+        <div class="row g-3" id="grid-materiais-recentes">
+          <div class="col-12 text-center py-4 text-muted border rounded-4 bg-white" style="border-style: dashed !important;">
+            <p class="mb-0 small"><i class="material-icons align-middle me-1">history</i> Nenhum material estudado recentemente.</p>
+          </div>
+        </div>
+      </div> 
+      
+      <div id="pdf-studio-view" style="display: none;">
+        <div class="pdf-toolbar mb-3">
+          
+          <div class="d-flex align-items-center justify-content-between w-100 flex-nowrap gap-1 gap-md-2" style="overflow-x: hidden;">
+            
+            <div class="d-flex align-items-center gap-1 flex-shrink-0">
+              <button class="btn btn-sm btn-white border shadow-sm rounded-circle d-flex align-items-center justify-content-center p-2 flex-shrink-0" style="width:35px; height:35px;" onclick="mostrarView('dashboard-view')" title="Voltar ao Painel">
+                <i class="material-icons text-dark">arrow_back</i>
+              </button>
+              
+              <div class="d-flex align-items-center gap-1 bg-light px-2 py-1 rounded-pill border shadow-sm flex-shrink-0">
+                <i class="material-icons text-primary ms-1 d-none d-md-block" id="studio-icon-display" style="font-size: 18px;">auto_awesome</i>
+                <select id="seletor-ferramenta-mesa" class="form-select form-select-sm fw-bold border-0 bg-transparent shadow-none px-1 px-md-2" style="width: 145px; font-size: 0.9rem; color: var(--text-main); cursor: pointer;" onchange="openTool(this.value)">
+                  <optgroup label="✨ Motor IA">
+                    <option value="quiz_generator" selected>Gerar Questões</option>
+                    <option value="summarize">Resumir Material</option>
+                    <option value="chat">Conversar (Copiloto)</option>
+                    <option value="mindmap">Mapas Mentais</option>
+                    <option value="flashcards">Cartões (FlashCards)</option>
+                  </optgroup>
+                </select>
+              </div>
+            </div>
+
+            <div class="d-flex align-items-center gap-1 bg-light px-1 px-md-2 py-1 rounded-pill border shadow-sm mx-auto flex-shrink-0">
+               <button class="btn btn-sm btn-light border-0 p-1 rounded-circle" onclick="undo()" title="Desfazer"><i class="material-icons text-secondary" style="font-size: 18px;">undo</i></button>
+               <button class="btn btn-sm btn-light border-0 p-1 rounded-circle" onclick="redo()" title="Refazer"><i class="material-icons text-secondary" style="font-size: 18px;">redo</i></button>
+               <div class="vr mx-1 bg-secondary opacity-25"></div>
+               <button class="btn btn-sm btn-light border-0 p-1 rounded-circle text-primary" onclick="adicionarPaginaEmBranco()" title="Folha em Branco"><i class="material-icons" style="font-size: 18px;">note_add</i></button>
+               <button class="btn btn-sm btn-light border-0 p-1 rounded-circle text-danger" onclick="excluirPaginasSelecionadas()" title="Excluir Selecionadas"><i class="material-icons" style="font-size: 18px;">delete_sweep</i></button>
+               <button class="btn btn-sm btn-light border-0 p-1 rounded-circle text-danger" onclick="limparMesaConfirmar()" title="Limpar Mesa"><i class="material-icons" style="font-size: 18px;">delete_forever</i></button>
+               <div class="vr mx-1 bg-secondary opacity-25 d-none d-sm-block"></div>
+               <div class="d-none d-sm-flex align-items-center gap-1 px-1">
+                 <i class="material-icons text-muted" style="font-size: 16px;">zoom_out</i>
+                 <input type="range" id="zoom-slider" class="form-range" min="100" max="300" value="160" style="width: 50px; height: 8px;">
+                 <i class="material-icons text-muted" style="font-size: 16px;">zoom_in</i>
+               </div>
+            </div>
+
+            <div class="d-flex align-items-center gap-1 gap-md-2 flex-shrink-0">
+              <button class="btn btn-outline-primary bg-white btn-sm rounded-pill px-2 px-md-3 shadow-sm fw-bold d-flex align-items-center gap-1" onclick="abrirModalVincularJornada()" title="Salvar na Jornada">
+                <i class="material-icons fs-6">save_alt</i> <span class="d-none d-xl-inline">À Jornada</span>
+              </button>
+               
+              <button class="btn btn-white bg-white border border-primary text-primary btn-sm rounded-pill px-2 px-md-3 shadow-sm d-flex align-items-center gap-1 fw-bold pulse-btn-add" onclick="document.getElementById('pdf-add-input').click()" title="Adicionar Material">
+                <i class="material-icons fs-6">add</i> <span class="d-none d-lg-inline">Material</span>
+              </button>
+              <input type="file" id="pdf-add-input" multiple accept=".pdf,.png,.jpg,.docx" style="display:none;" onchange="loadPdfs(this.files)">
+              
+              <button id="btn-finalizar" class="btn btn-primary btn-sm rounded-pill px-2 px-md-3 shadow-sm fw-bold d-flex align-items-center gap-1" onclick="processarPdfFinal()" title="Processar">
+                <i class="material-icons fs-6">rocket_launch</i> <span class="d-none d-md-inline">Processar</span>
+              </button>
+            </div>
+          </div>
+
+          <div id="pdf-context-submenu" class="mt-2 pt-2 border-top"></div>
+        </div>
+
+        <div id="pdf-preview-area" class="pdf-preview-container shadow-sm border rounded-4" style="--page-size: 160px;">
+          </div>
+
+        <div id="chat-workspace" class="d-none mt-4 shadow-sm" style="display: flex; height: calc(100vh - 220px); background: #f8fafc; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0;">
+          <div id="chat-sidebar" style="width: 220px; background: #ffffff; overflow-y: auto; padding: 20px; border-right: 1px solid #e2e8f0; display: flex; flex-direction: column;"></div>
+          <div style="flex: 1; display: flex; flex-direction: column; background: #fff; position: relative;">
+            <div id="chat-history" style="flex: 1; overflow-y: auto; padding: 30px; display: flex; flex-direction: column;"></div>
+            <div style="padding: 20px; background: #f8fafc; border-top: 1px solid #e2e8f0;">
+              <div class="input-group shadow-sm" style="border-radius: 12px; overflow: hidden; border: 1px solid #cbd5e1;">
+                <input type="text" id="chat-input" class="form-control border-0 p-3 bg-white" placeholder="Pergunte algo sobre a matéria ao seu tutor IA..." onkeypress="if(event.key === 'Enter') enviarMensagemChat()">
+                <button class="btn border-0 px-4" style="background: linear-gradient(135deg, #3b82f6, #2563eb); color: white;" onclick="enviarMensagemChat()">
+                  <i class="material-icons" style="vertical-align: middle;">send</i>
+                </button>
+              </div>
+              <div class="text-center mt-2 text-muted" style="font-size: 11px;">
+                A IA pode cometer erros. Confirme as informações importantes nos seus próprios apontamentos.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div> 
+
+      <div id="resumos-view" style="display:none;">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h3 class="fw-bold text-dark"><i class="material-icons me-2 text-primary">folder_special</i> Meus Resumos</h3>
+            <button class="btn btn-primary rounded-pill px-3 shadow-sm" onclick="mostrarView('pdf-studio-view'); openTool('summarize');">Gerar Novo Resumo</button>
+        </div>
+        <div class="row g-4" id="grid-resumos">
+          <div class="col-12 text-center py-5 text-muted">
+            <i class="material-icons mb-3" style="font-size: 48px; opacity: 0.3;">description</i>
+            <h5>Nenhum resumo salvo.</h5>
+            <p class="small">Use a Estação de Ferramentas para analisar e resumir os seus materiais.</p>
+          </div>
+        </div>
+      </div>
+
+      <div id="quiz-view" style="display:none;">
+          <div class="d-flex justify-content-between align-items-center mb-4">
+              <h3 class="fw-bold text-dark"><i class="material-icons me-2 text-success">quiz</i> Questionários</h3>
+              <button class="btn btn-success rounded-pill px-3 shadow-sm" onclick="mostrarView('pdf-studio-view'); openTool('quiz_generator');">Criar Simulado</button>
+          </div>
+          <div class="row g-4" id="grid-questionarios">
+            <div class="col-12 text-center py-5 text-muted">
+              <i class="material-icons mb-3" style="font-size: 48px; opacity: 0.3;">assignment</i>
+              <h5>Nenhum questionário gerado.</h5>
+              <p class="small">Ponha os seus conhecimentos à prova criando o seu primeiro simulado IA.</p>
+            </div>
+          </div>
+      </div>
+
+      <div id="mapas-view" style="display:none;">
+          <div class="d-flex justify-content-between align-items-center mb-4">
+              <h3 class="fw-bold text-dark"><i class="material-icons me-2 text-pink">account_tree</i> Mapas Mentais</h3>
+              <button class="btn btn-danger rounded-pill px-3 shadow-sm" onclick="mostrarView('pdf-studio-view'); openTool('mindmap');" style="background-color: #ec4899; border: none;">Criar Mapa</button>
+          </div>
+          <div class="row g-4" id="grid-mapas">
+            <div class="col-12 text-center py-5 text-muted">
+              <i class="material-icons mb-3" style="font-size: 48px; opacity: 0.3;">schema</i>
+              <h5>Nenhum mapa mental disponível.</h5>
+              <p class="small">Extraia fluxos visuais da sua matéria utilizando a IA.</p>
+            </div>
+          </div>
+      </div>
+
+      <div id="cartoes-view" style="display:none;">
+          <div class="d-flex justify-content-between align-items-center mb-4">
+              <h3 class="fw-bold text-dark"><i class="material-icons me-2 text-orange">style</i> Meus Cartões (Flashcards)</h3>
+              <button class="btn rounded-pill px-3 shadow-sm text-white" style="background-color: #f97316;">Criar Baralho</button>
+          </div>
+          <div class="row g-4" id="grid-cartoes">
+            <div class="col-12 text-center py-5 text-muted">
+              <i class="material-icons mb-3" style="font-size: 48px; opacity: 0.3;">view_carousel</i>
+              <h5>Nenhum baralho criado.</h5>
+              <p class="small">Os flashcards são ótimos para a memorização ativa.</p>
+            </div>
+          </div>
+      </div>
+
+      <div id="agenda-view" style="display:none;">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+           <div>
+             <h3 class="fw-bold text-dark m-0"><i class="material-icons me-2 text-warning align-middle">calendar_month</i> Agenda de Missões</h3>
+             <p class="text-muted small m-0 mt-1">Cumpra as missões diárias sugeridas pela IA para evoluir a sua Vaquinha.</p>
+           </div>
+        </div>
+        
+        <div class="row g-4">
+          <div class="col-md-8" id="agenda-tasks-container">
+            </div>
+          <div class="col-md-4">
+             <div class="card border-0 shadow-sm rounded-4 p-4 text-center h-100 bg-white" style="border: 2px solid var(--border-color) !important;">
+                <h5 class="fw-bold text-secondary mb-4">A tua Evolução</h5>
+                <img src="https://i.ibb.co/5WHfDf0R/vaquinha.png" id="vaquinha-big-avatar" class="mb-3 mx-auto" style="width: 120px; filter: drop-shadow(0 10px 15px rgba(245,158,11,0.3));">
+                <h2 class="fw-bold text-dark m-0">Nível <span id="painel-level">1</span></h2>
+                <p class="text-muted small mb-4" id="painel-rank">Vaquinha Estudante</p>
+                <div class="bg-light rounded-3 p-3 text-start">
+                   <div class="d-flex justify-content-between small fw-bold mb-2"><span>Próxima recompensa:</span> <span>Chapéu de Mestre</span></div>
+                   <div class="progress" style="height: 10px; border-radius: 10px;"><div class="progress-bar bg-success" id="painel-xp-bar" style="width: 0%;"></div></div>
+                </div>
+             </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="tecnicas-view" style="display:none;">
+        <h3 class="fw-bold text-dark mb-4"><i class="material-icons me-2">menu_book</i> Técnicas de Estudo</h3>
+        <div class="row g-4" id="grid-tecnicas">
+            <div class="col-md-6">
+                <div class="card border-0 shadow-sm rounded-4 p-4 d-flex flex-row gap-3 h-100">
+                    <div class="bg-warning text-white rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width: 50px; height: 50px;">
+                        <i class="material-icons">timer</i>
+                    </div>
+                    <div>
+                        <h5 class="fw-bold text-dark mb-1">Técnica Pomodoro</h5>
+                        <p class="text-muted small m-0">25 minutos de foco total, 5 minutos de pausa. Ideal para evitar a fadiga mental e manter a produtividade alta.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card border-0 shadow-sm rounded-4 p-4 d-flex flex-row gap-3 h-100">
+                    <div class="bg-info text-white rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width: 50px; height: 50px;">
+                        <i class="material-icons">psychology</i>
+                    </div>
+                    <div>
+                        <h5 class="fw-bold text-dark mb-1">Repetição Espaçada</h5>
+                        <p class="text-muted small m-0">Revise os resumos e questionários gerados pela IA em intervalos programados para fixar o conteúdo a longo prazo.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+      </div>
+
+      <div id="jornadas-view" style="display:none;">
+        <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+          <div>
+            <h3 class="fw-bold text-dark m-0"><i class="material-icons me-2 text-primary align-middle">route</i> Minhas Jornadas</h3>
+            <p class="text-muted small m-0 mt-1">O seu ponto de partida. Estruture cursos, semestres ou concursos.</p>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <button class="btn btn-outline-primary bg-white rounded-pill px-3 shadow-sm fw-bold d-flex align-items-center gap-1" onclick="abrirModalJornadaManual()">
+              <i class="material-icons fs-6">edit</i> <span class="d-none d-sm-inline">Criar Manualmente</span>
+            </button>
+            <button class="btn btn-primary rounded-pill px-4 shadow-sm fw-bold d-flex align-items-center gap-2 pulse-btn-add" onclick="abrirModalPreEdital()">
+              <i class="material-icons fs-6 text-warning">auto_awesome</i> Ler Edital com IA
+            </button>
+            <input type="file" id="input-novo-edital" accept=".pdf,.docx,.txt" style="display:none;" onchange="if(typeof iniciarLeituraDeEdital === 'function') iniciarLeituraDeEdital(this.files[0])">
+          </div>
+        </div>
+
+        <div class="row g-4" id="grid-jornadas-ativas">
+           <div class="col-12 text-center py-5 text-muted border rounded-4 bg-white shadow-sm" style="border-style: dashed !important;">
+             <div class="spinner-border text-primary spinner-border-sm mb-2" role="status"></div>
+             <p class="mb-0 small">A carregar as suas jornadas...</p>
+           </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <div id="modalPdfPreview" class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1060; background: rgba(15,23,42,0.9); overflow: auto; display: none;" aria-hidden="true">
+    <button type="button" class="btn btn-light position-fixed top-0 end-0 m-4 rounded-circle shadow p-2 d-flex align-items-center" style="z-index: 1061;" onclick="document.getElementById('modalPdfPreview').classList.remove('show'); document.getElementById('modalPdfPreview').classList.add('d-none'); document.getElementById('modalPdfPreview').style.display = 'none';">
+      <i class="material-icons">close</i>
+    </button>
+    <div class="w-100 h-100 d-flex align-items-center justify-content-center p-4">
+      <div class="position-relative">
+        <img id="img-large-preview" src="" alt="Preview" class="img-fluid bg-white rounded shadow-lg" style="max-height: 85vh;">
+      </div>
+    </div>
+    <div class="zoom-nav-pill position-fixed bottom-0 start-50 translate-middle-x mb-4 d-flex align-items-center shadow-lg bg-white rounded-pill px-3 py-2" style="z-index: 1061;">
+      <button class="btn btn-sm btn-light border-0 rounded-circle d-flex align-items-center" onclick="navegarZoom(-1, event)">
+        <i class="material-icons">chevron_left</i>
+      </button>
+      <div class="mx-3 fw-bold text-secondary small">
+        <span id="zoom-current-page">1</span> de <span id="zoom-total-pages">1</span>
+      </div>
+      <button class="btn btn-sm btn-light border-0 rounded-circle d-flex align-items-center" onclick="navegarZoom(1, event)">
+        <i class="material-icons">chevron_right</i>
+      </button>
+    </div>
+  </div>
+
+  <div class="modal fade" id="modalValidarEdital" tabindex="-1" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+          <div class="modal-content rounded-4 border-0 shadow-lg">
+            <div class="modal-header border-bottom bg-light px-4 py-3">
+              <h5 class="modal-title fw-bold text-dark d-flex align-items-center">
+                <i class="material-icons me-2 text-primary">psychology</i> Estrutura Identificada
+              </h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4 bg-white" id="edital-ia-resultado">
+              <p class="text-muted small mb-4">A IA analisou o documento. Verifique se as matérias e tópicos estão corretos antes de criar o seu roteiro.</p>
+              
+              <div id="tree-materias-edital" class="accordion shadow-sm border-0"></div>
+              
+            </div>
+            <div class="modal-footer bg-light border-top">
+              <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Cancelar</button>
+              <button type="button" class="btn btn-primary rounded-pill px-4 fw-bold" onclick="salvarNovaJornada()">Confirmar e Criar Jornada</button>
+            </div>
+          </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modalPreEditalIA" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 border-0 shadow-lg">
+          <div class="modal-header border-bottom bg-light px-4 py-3">
+            <h5 class="modal-title fw-bold text-dark d-flex align-items-center">
+              <i class="material-icons me-2 text-primary">psychology</i> Assistente de Edital IA
+            </h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body p-4 bg-white">
+            <div class="bg-primary-subtle border border-primary-subtle rounded-3 p-3 mb-4 d-flex gap-2 align-items-start">
+               <i class="material-icons text-primary" style="font-size: 20px;">auto_awesome</i>
+               <p class="small text-dark m-0 fw-semibold">A IA cruzará o Quadro de Provas com o Conteúdo Programático. Diga-nos exatamente o seu alvo!</p>
+            </div>
+            
+            <div class="mb-3">
+              <label class="form-label small fw-bold text-secondary">Cargo / Curso Desejado <span class="text-danger">*</span></label>
+              <input type="text" id="ia-edital-cargo" class="form-control bg-light" placeholder="Ex: Psicólogo, Técnico Administrativo..." required>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label small fw-bold text-secondary">Nível de Escolaridade <span class="text-danger">*</span></label>
+              <select id="ia-edital-nivel" class="form-select bg-light" required>
+                <option value="Nível Superior">Nível Superior</option>
+                <option value="Nível Médio">Nível Médio</option>
+                <option value="Nível Técnico">Nível Técnico</option>
+                <option value="Nível Fundamental">Nível Fundamental</option>
+              </select>
+            </div>
+            
+            <div class="mb-4">
+              <label class="form-label small fw-bold text-secondary">Ficheiro do Edital <span class="text-danger">*</span></label>
+              <input type="file" id="ia-edital-file" class="form-control bg-light" accept=".pdf" required>
+            </div>
+            
+            <button class="btn btn-primary w-100 rounded-pill fw-bold d-flex align-items-center justify-content-center gap-2" onclick="submeterEditalIA()">
+              <i class="material-icons fs-6">troubleshoot</i> Iniciar Leitura Inteligente
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  <div class="modal fade" id="modalJornadaManual" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content rounded-4 border-0 shadow-lg">
+        <div class="modal-header border-bottom bg-light px-4 py-3">
+          <h5 class="modal-title fw-bold text-dark d-flex align-items-center">
+            <i class="material-icons me-2 text-primary">edit_document</i> Nova Jornada Manual
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body p-4 bg-white">
+          <div class="mb-3">
+            <label class="form-label small fw-bold text-secondary">Nome da Jornada (Cargo / Curso)</label>
+            <input type="text" id="manual-jornada-nome" class="form-control bg-light" placeholder="Ex: Concurso INSS - Técnico">
+          </div>
+          
+          <div class="row mb-3">
+            <div class="col-6">
+              <label class="form-label small fw-bold text-secondary">Tipo</label>
+              <select id="manual-jornada-tipo" class="form-select bg-light">
+                <option value="Concurso Público">Concurso Público</option>
+                <option value="Faculdade/Curso">Faculdade / Curso Técnico</option>
+                <option value="Estudo Livre">Estudo Livre (Autodidata)</option>
+              </select>
+            </div>
+            <div class="col-6">
+              <label class="form-label small fw-bold text-secondary">Nível</label>
+              <select id="manual-jornada-nivel" class="form-select bg-light">
+                <option value="Nível Médio">Nível Médio</option>
+                <option value="Nível Superior">Nível Superior</option>
+                <option value="Nível Técnico">Nível Técnico</option>
+                <option value="Não se aplica">Não se aplica</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <label class="form-label small fw-bold text-secondary">Matérias Base (Separadas por vírgula)</label>
+            <textarea id="manual-jornada-materias" class="form-control bg-light" rows="3" placeholder="Português, Direito Constitucional, Informática..."></textarea>
+          </div>
+          <button class="btn btn-primary w-100 rounded-pill fw-bold" onclick="salvarJornadaManual()">Gravar Estrutura</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="modalPainelJornada" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+      <div class="modal-content rounded-4 border-0 shadow-lg">
+        <div class="modal-header border-bottom bg-light px-4 py-3 align-items-start">
+          <div>
+            <span class="badge bg-warning text-dark rounded-pill fw-bold mb-1" id="painel-jor-tipo">Tipo</span>
+            <h4 class="modal-title fw-bold text-dark m-0" id="painel-jor-nome">Nome da Jornada</h4>
+          </div>
+          <button type="button" class="btn-close mt-2" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body p-0 bg-white d-flex flex-column flex-md-row">
+          
+          <div class="w-100 w-md-50 border-end p-4 bg-light" style="max-height: 50vh; overflow-y: auto;">
+            <h6 class="fw-bold text-dark mb-3"><i class="material-icons align-middle text-primary me-1">inventory_2</i> Cofre de Matérias</h6>
+            <p class="small text-muted mb-3">Arraste materiais para dentro de cada matéria ou use a Mesa de Estudos para vinculá-los.</p>
+            <div class="list-group" id="painel-jor-materias-lista">
+              </div>
+          </div>
+          
+          <div class="w-100 w-md-50 p-4">
+            <h6 class="fw-bold text-dark mb-3"><i class="material-icons align-middle text-success me-1">smart_toy</i> Roteiro & Agenda</h6>
+            <div class="bg-success-subtle p-3 rounded-3 border border-success-subtle mb-4">
+               <p class="small text-dark fw-semibold m-0 mb-2">A IA irá gerar um cronograma cruzando o seu tempo com o peso das matérias e nível de conhecimento.</p>
+            </div>
+            
+            <div class="mb-3">
+              <label class="form-label small fw-bold text-secondary">Data Alvo (Prova / Exame)</label>
+              <input type="date" class="form-control" id="painel-jor-data">
+            </div>
+            <div class="mb-4">
+              <label class="form-label small fw-bold text-secondary">Disponibilidade Diária</label>
+              <select class="form-select" id="painel-jor-horas">
+                <option value="1">1 hora por dia</option>
+                <option value="2">2 a 3 horas por dia</option>
+                <option value="4">4+ horas por dia</option>
+              </select>
+            </div>
+            <button class="btn btn-success w-100 rounded-pill fw-bold shadow-sm d-flex justify-content-center align-items-center gap-2" onclick="gerarRoteiroAgenda()">
+               <i class="material-icons">bolt</i> Gerar Roteiro na Agenda
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="modalVincularJornada" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content rounded-4 border-0 shadow-lg">
+        <div class="modal-header border-bottom bg-light px-4 py-3">
+          <h5 class="modal-title fw-bold text-dark d-flex align-items-center">
+            <i class="material-icons me-2 text-primary">save_alt</i> Salvar Material no Cofre
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body p-4 bg-white">
+          <p class="text-muted small mb-3">Escolha a Jornada e a Matéria onde deseja arquivar os ficheiros que estão atualmente na Mesa de Estudos.</p>
+          
+          <div class="mb-3">
+            <label class="form-label small fw-bold text-secondary">Jornada Ativa</label>
+            <select class="form-select bg-light" disabled>
+              <option selected>Analista de Sistemas - HCPA</option>
+            </select>
+          </div>
+          
+          <div class="mb-4">
+            <label class="form-label small fw-bold text-secondary">Matéria de Destino</label>
+            <select id="select-materia-vincular" class="form-select border-primary shadow-sm">
+              </select>
+          </div>
+          
+          <button class="btn btn-primary w-100 rounded-pill fw-bold" onclick="confirmarVinculoJornada()">Confirmar e Guardar (+10 XP)</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="modalConfirmarLimpeza" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered modal-sm">
+          <div class="modal-content rounded-4 border-0 shadow-lg text-center p-4">
+              <i class="material-icons text-danger mb-3" style="font-size: 48px;">delete_sweep</i>
+              <h5 class="fw-bold text-dark">Limpar Mesa?</h5>
+              <p class="text-muted small mb-4">Todos os materiais não guardados na jornada serão removidos da sua mesa de estudos.</p>
+              <div class="d-flex gap-2 w-100">
+                  <button class="btn btn-light w-50 rounded-pill fw-bold" data-bs-dismiss="modal">Cancelar</button>
+                  <button class="btn btn-danger w-50 rounded-pill fw-bold" onclick="executarLimpezaMesa()">Sim, limpar</button>
+              </div>
+          </div>
+      </div>
+  </div>
+
+  <div class="modal fade" id="modalConfiguracoes" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content rounded-4 border-0 shadow-lg overflow-hidden">
+        <div class="modal-header border-bottom bg-light px-4 py-3">
+          <h5 class="modal-title fw-bold text-dark d-flex align-items-center"><i class="material-icons me-2 text-secondary">settings</i> Configurações da Estação</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body d-flex p-0" style="min-height: 400px;">
+          <div class="bg-light border-end w-25 p-3">
+            <div class="nav flex-column nav-pills" id="config-tabs" role="tablist" aria-orientation="vertical">
+              <button class="nav-link active text-start mb-2 fw-semibold" data-bs-toggle="pill" data-bs-target="#config-geral" type="button" role="tab">Conta Global</button>
+              <button class="nav-link text-start mb-2 fw-semibold" data-bs-toggle="pill" data-bs-target="#config-aparencia" type="button" role="tab">Interface</button>
+              <button class="nav-link text-start mb-2 fw-semibold" data-bs-toggle="pill" data-bs-target="#config-api" type="button" role="tab">Motor IA (API)</button>
+            </div>
+          </div>
+          <div class="tab-content w-75 p-4 bg-white" id="config-tabContent">
+            
+            <div class="tab-pane fade show active" id="config-geral" role="tabpanel">
+              <h5 class="fw-bold mb-1 text-dark">Preferências da Conta</h5>
+              <p class="text-muted small mb-4">Ajuste os dados base do seu ambiente de estudos.</p>
+              <div class="mb-3">
+                <label class="form-label small fw-bold text-secondary">Nome de Exibição</label>
+                <input type="text" class="form-control bg-light" id="config-nome" placeholder="Seu nome">
+              </div>
+              <div class="mb-3">
+                <label class="form-label small fw-bold text-secondary">Notificações por Email</label>
+                <select class="form-select bg-light">
+                  <option value="all">Receber todas as novidades</option>
+                  <option value="important">Apenas resumos de atividade</option>
+                  <option value="none">Não receber</option>
+                </select>
+              </div>
+              <button class="btn btn-primary btn-sm px-4 rounded-pill mt-2">Guardar Alterações</button>
+            </div>
+
+            <div class="tab-pane fade" id="config-aparencia" role="tabpanel">
+              <h5 class="fw-bold mb-1 text-dark">Interface e Layout</h5>
+              <p class="text-muted small mb-4">Personalize como a Estação é apresentada.</p>
+              <div class="form-check form-switch mb-3 d-flex align-items-center gap-2">
+                <input class="form-check-input" type="checkbox" id="themeSwitch" style="transform: scale(1.2);">
+                <label class="form-check-label fw-semibold text-secondary pt-1" for="themeSwitch">Ativar Modo Noturno (Em Breve)</label>
+              </div>
+              <div class="form-check form-switch mb-3 d-flex align-items-center gap-2">
+                <input class="form-check-input" type="checkbox" id="animSwitch" checked style="transform: scale(1.2);">
+                <label class="form-check-label fw-semibold text-secondary pt-1" for="animSwitch">Animações de Interface</label>
+              </div>
+            </div>
+
+            <div class="tab-pane fade" id="config-api" role="tabpanel">
+              <h5 class="fw-bold mb-1 text-dark">Integração do Motor de IA</h5>
+              <p class="text-muted small mb-4">Gerencie as chaves de API necessárias para as ferramentas generativas (Resumos, Mapas, Quizzes).</p>
+              
+              <div class="mb-4">
+                <div class="d-flex justify-content-between align-items-end mb-1">
+                  <label class="form-label small fw-bold text-secondary m-0">Chave Gemini (Google AI Studio)</label>
+                  <a href="https://aistudio.google.com/app/apikey" target="_blank" class="small text-decoration-none d-flex align-items-center gap-1" title="Abre numa nova aba">
+                    <i class="material-icons" style="font-size: 14px;">open_in_new</i> Obter chave gratuita
+                  </a>
+                </div>
+                <div class="input-group shadow-sm">
+                  <span class="input-group-text bg-light border-end-0"><i class="material-icons text-muted" style="font-size:18px;">vpn_key</i></span>
+                  <input type="password" class="form-control border-start-0 font-monospace bg-light" id="input-gemini-key-config" placeholder="AIzaSy...">
+                </div>
+                <div class="form-text small mt-2">A sua chave é armazenada de forma segura e local no seu próprio navegador.</div>
+              </div>
+              
+              <div class="d-flex gap-2">
+                <button class="btn btn-primary rounded-pill px-4 shadow-sm" onclick="if(typeof salvarGeminiKey === 'function') salvarGeminiKey();">Conectar Chave</button>
+                <button class="btn btn-outline-danger rounded-pill px-3" onclick="if(typeof removerGeminiKey === 'function') removerGeminiKey();">Desconectar</button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pdf-lib/dist/pdf-lib.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+
+  <?!= HtmlService.createHtmlOutputFromFile('js_core').getContent(); ?>
+  <?!= HtmlService.createHtmlOutputFromFile('js_mesa_ui').getContent(); ?>
+  <?!= HtmlService.createHtmlOutputFromFile('js_ia_core').getContent(); ?>
+  <?!= HtmlService.createHtmlOutputFromFile('js_ia_api').getContent(); ?>
+  <?!= HtmlService.createHtmlOutputFromFile('js_views_estudo').getContent(); ?>
+  <?!= HtmlService.createHtmlOutputFromFile('js_gamificacao').getContent(); ?>
+  
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      if(typeof window.PDF_STUDIO_INIT === 'function') {
+        window.PDF_STUDIO_INIT();
+      }
+
+      const modalKeyInput = document.getElementById('input-gemini-key-config');
+      if(modalKeyInput && localStorage.getItem('gemini_api_key')) {
+         modalKeyInput.value = localStorage.getItem('gemini_api_key');
+      }
+
+      // Gancho (Hook) para injetar as MooDicas sempre que a ferramenta muda
+      if (typeof openTool === 'function') {
+         const originalOpenTool = openTool;
+         window.openTool = function(toolId) {
+             originalOpenTool(toolId);
+             exibirMooDicaAtual(toolId);
+         };
+      }
+      
+      // Mostrar uma dica geral de boas-vindas após o login/carregamento
+      setTimeout(() => exibirMooDicaAtual('default'), 2000);
+    });
+
+    /* ==========================================================================
+       MOTOR DAS MOODICAS (SMART TIPS DA VAQUINHA)
+       ========================================================================== */
+    const moodicasDB = {
+        'default': [
+            "Muuu! Bem-vindo à Estação. Escolhe uma ferramenta na Mesa de Estudos para começarmos!",
+            "Sabias que estudar em blocos de 25 minutos (Pomodoro) aumenta a tua retenção?",
+            "Um ambiente organizado ajuda no foco. Limpa a mesa de materiais que já não usas!"
+        ],
+        'quiz_generator': [
+            "Dica de Mestre: Fazer testes ANTES de estudar ajuda o teu cérebro a focar no que é importante na hora de ler.",
+            "A repetição ativa com simulados é provada cientificamente que aumenta a retenção em até 40%!",
+            "Errou a questão? Não há problema! O segredo é ler sempre o gabarito comentado para aprender com o erro."
+        ],
+        'summarize': [
+            "Textos gigantes assustam. Pede um 'Resumo Executivo' para criar um mapa mental antes de ires a fundo na matéria!",
+            "Dica: Usa a opção 'Tópicos Principais' para gerar pontos chave. Depois, cria os teus próprios flashcards com eles.",
+            "A matéria está muito densa? Pede uma 'Explicação Detalhada' para mastigar o conteúdo e facilitar a digestão."
+        ],
+        'chat': [
+            "Quer ir mais a fundo? Peça ao Copiloto IA para lhe explicar a matéria usando uma analogia do dia a dia!",
+            "Seja específico! Quanto mais contexto der na sua pergunta, mais precisa será a resposta do seu Tutor IA.",
+            "Dificuldades num conceito? Use o prompt: 'Explica-me isto como se eu tivesse 10 anos de idade'."
+        ],
+        'mindmap': [
+            "Os mapas mentais ativam o hemisfério direito do cérebro. Aprenda a ver a floresta inteira antes das árvores!",
+            "Dica de Ouro: Comece pelo centro e vá destrinchando. É exatamente assim que o seu cérebro organiza informações.",
+            "Faça download do PNG do mapa mental e use-o como papel de parede para fazer revisões passivas."
+        ],
+        'flashcards': [
+            "A repetição espaçada faz milagres. A honestidade também! Avalie o cartão como 'Fácil' apenas se souber mesmo a resposta.",
+            "Cartões curtos são melhores que textões longos. Uma ideia central por cartão facilita muito a memorização!",
+            "Dica: Tente responder em voz alta ANTES de virar o cartão. Isso força a memória ativa a trabalhar."
+        ],
+        'read_pdf': [
+            "Estudos indicam que ouvir a matéria enquanto se acompanha o texto visualmente melhora dramaticamente o foco.",
+            "Use o Leitor Imersivo quando estiver com fadiga visual. Feche os olhos um pouco e deixe os ouvidos trabalharem!",
+            "Ajustar a velocidade: tente forçar o seu cérebro a acompanhar o ritmo da palavra destacada. Treina a velocidade de leitura!"
+        ],
+        'ocr': [
+            "Lembre-se: Imagens com boa iluminação e texto bem contrastado geram extrações muito mais precisas.",
+            "Este processo 'queima' o texto de forma invisível por trás da imagem original, tornando a sua foto perfeitamente pesquisável pela IA!"
+        ]
+    };
+
+    let mooDicaTimeout;
+    
+    function exibirMooDicaAtual(toolId = null) {
+        const balao = document.getElementById('moodicas-balao');
+        const texto = document.getElementById('moodicas-texto');
+        if (!balao || !texto) return;
+        
+        // Se toolId não for passado, tenta descobrir pelo ambiente global ou usa o 'default'
+        let contexto = toolId || (typeof currentTool !== 'undefined' && currentTool ? currentTool : 'default');
+        
+        // Fallback de segurança se o ID não existir no dicionário
+        if (!moodicasDB[contexto]) contexto = 'default';
+        
+        const banco = moodicasDB[contexto];
+        const dicaAleatoria = banco[Math.floor(Math.random() * banco.length)];
+        
+        texto.innerHTML = `<strong>MooDica:</strong> ${dicaAleatoria}`;
+        
+        // Reset da animação
+        balao.classList.remove('show');
+        clearTimeout(mooDicaTimeout);
+        
+        // Trigger do fade-in (com pequeno delay para o DOM processar a mudança de classe)
+        setTimeout(() => {
+            balao.classList.add('show');
+            // Auto-ocultar após 9 segundos para não ser invasivo
+            mooDicaTimeout = setTimeout(() => {
+                balao.classList.remove('show');
+            }, 9000); 
+        }, 150);
+    }
+
+    // Função auxiliar acionada pelo clique direto na vaquinha pelo utilizador
+    window.forcarNovaMooDica = function() {
+        // Passar nulo força a função a ler a ferramenta atual (currentTool) do ambiente
+        exibirMooDicaAtual(null); 
+    };
+  </script>
+</body>
+</html>
