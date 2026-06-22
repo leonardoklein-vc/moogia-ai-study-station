@@ -16,6 +16,31 @@ var STUDY_TOOLS_CONFIG = {
 };
 
 /**
+ * PUBLIC REPOSITORY NOTICE
+ * --------------------------------------------------------------------------
+ * This file is a sanitized portfolio/public-repository version.
+ * Do not commit real credentials, private prompts, production folder IDs,
+ * spreadsheet IDs, API keys, patient data, institutional data, or personal emails.
+ * Runtime secrets should be stored in Apps Script PropertiesService.
+ */
+
+var MOOGIA_PUBLIC_PLACEHOLDERS = {
+  defaultAdminEmail: "admin@example.com",
+  defaultAdminPassword: "CHANGE_ME_IN_PRIVATE_DEPLOYMENT",
+  assetsFolderProperty: "MOOGIA_ASSETS_FOLDER_ID",
+  adminEmailsProperty: "MOOGIA_ADMIN_EMAILS"
+};
+
+function _getConfiguredAdminEmails_() {
+  try {
+    var raw = PropertiesService.getScriptProperties().getProperty(MOOGIA_PUBLIC_PLACEHOLDERS.adminEmailsProperty) || "";
+    return raw.split(',').map(function(email) { return email.toLowerCase().trim(); }).filter(String);
+  } catch (e) {
+    return [];
+  }
+}
+
+/**
  * ==========================================================================
  * PONTO DE ENTRADA (Renderização do HTML e Inicialização)
  * ==========================================================================
@@ -39,7 +64,7 @@ function inicializarEstruturaDB() {
       sheetUsuarios = ss.insertSheet("Usuarios");
       sheetUsuarios.appendRow(["Email", "Senha", "Nome", "Perfil", "Ultimo_Acesso"]);
       sheetUsuarios.getRange("A1:E1").setFontWeight("bold").setBackground("#e6ffed");
-      sheetUsuarios.appendRow(["admin@moogia.com", "moogia123", "Administrador Padrão", "Admin", new Date().toISOString()]);
+      sheetUsuarios.appendRow([MOOGIA_PUBLIC_PLACEHOLDERS.defaultAdminEmail, MOOGIA_PUBLIC_PLACEHOLDERS.defaultAdminPassword, "Administrador Demo", "Admin", new Date().toISOString()]);
     }
     
     var sheetJornadas = ss.getSheetByName("Jornadas_DB");
@@ -117,12 +142,9 @@ function validarLoginDB(email, senha) {
   try {
     var emailClean = email.toString().toLowerCase().trim();
 
-    if (emailClean === "leonardo.rocha@gmail.com" && senha === "aabb123456") {
-      return { success: true, nome: "Leonardo Rocha", email: emailClean, role: "Admin" };
-    }
-    if (emailClean === "lzigue@hcpa.edu.br" && senha === "aabb654321") {
-      return { success: true, nome: "Lzigue", email: emailClean, role: "Admin" };
-    }
+    // Public-safe version: no hardcoded personal/admin credentials.
+    // Configure real admins in Script Properties under MOOGIA_ADMIN_EMAILS
+    // and manage user credentials in the private deployment database.
 
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sheet = ss.getSheetByName("Usuarios");
@@ -151,7 +173,8 @@ function validarLoginDB(email, senha) {
 
 function _verificarSeEhAdmin(email) {
   var emailClean = email.toLowerCase().trim();
-  if (emailClean === "leonardo.rocha@gmail.com" || emailClean === "lzigue@hcpa.edu.br") return true;
+  var configuredAdmins = _getConfiguredAdminEmails_();
+  if (configuredAdmins.indexOf(emailClean) > -1) return true;
   
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName("Usuarios");
@@ -618,7 +641,10 @@ function carregarRegrasGamificacaoBD() {
 // 1. Upload Direto para a sua Pasta Específica (COM LINK CORRIGIDO PARA IMAGENS)
 function uploadImagemAsset(base64Data, fileName) {
   try {
-    var folderId = "1fhTmrYbvRhB8ulya79vCRyBr6fvYN3PM"; // Sua pasta do Drive
+    var folderId = PropertiesService.getScriptProperties().getProperty(MOOGIA_PUBLIC_PLACEHOLDERS.assetsFolderProperty);
+    if (!folderId) {
+      throw new Error("Configure a propriedade de script " + MOOGIA_PUBLIC_PLACEHOLDERS.assetsFolderProperty + " antes de usar upload de assets.");
+    }
     var folder = DriveApp.getFolderById(folderId);
     
     // Garante que os ficheiros ali dentro podem ser vistos na web
