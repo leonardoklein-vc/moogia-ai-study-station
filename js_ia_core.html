@@ -70,12 +70,55 @@ const ToolRegistry = {
           </div>
           <div>
             <label class="small fw-bold text-secondary mb-1">Dificuldade da Prova</label>
-            <select id="ia-quiz-level" class="form-select form-select-sm shadow-sm" style="width: 150px;">
+            <select id="ia-quiz-level" class="form-select form-select-sm shadow-sm" style="width: 140px;">
               <option value="fácil">Revisão Básica</option>
-              <option value="médio" selected>Nível Intermédio</option>
+              <option value="médio" selected>Intermédio</option>
               <option value="difícil">Avançado</option>
               <option value="concurso">Nível Concurso</option>
             </select>
+          </div>
+          <div>
+            <label class="small fw-bold text-secondary mb-1">Estilos da Banca (Multi-seleção)</label>
+            <div class="dropdown">
+              <button class="btn btn-white btn-sm border shadow-sm dropdown-toggle text-primary fw-bold text-start w-100 bg-white" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" style="min-width: 250px;">
+                <i class="material-icons align-middle" style="font-size: 16px;">checklist</i> Escolher Estilos...
+              </button>
+              <div class="dropdown-menu p-3 shadow-sm border-0" style="min-width: 280px; max-height: 250px; overflow-y: auto;">
+                <div class="form-check mb-2">
+                  <input class="form-check-input quiz-style-check shadow-sm" type="checkbox" value="mix" id="style-all" checked onchange="document.querySelectorAll('.quiz-style-check:not(#style-all)').forEach(cb => cb.checked = false)">
+                  <label class="form-check-label fw-bold text-primary" for="style-all">✨ Todos os Estilos (Mix Aleatório)</label>
+                </div>
+                <hr class="dropdown-divider opacity-25">
+                <div class="form-check mb-1">
+                  <input class="form-check-input quiz-style-check" type="checkbox" value="2" id="style-2" onchange="document.getElementById('style-all').checked = false">
+                  <label class="form-check-label small text-dark" for="style-2">Múltipla Escolha Clássica (A-E)</label>
+                </div>
+                <div class="form-check mb-1">
+                  <input class="form-check-input quiz-style-check" type="checkbox" value="1" id="style-1" onchange="document.getElementById('style-all').checked = false">
+                  <label class="form-check-label small text-dark" for="style-1">Certo/Errado (Estilo Cespe)</label>
+                </div>
+                <div class="form-check mb-1">
+                  <input class="form-check-input quiz-style-check" type="checkbox" value="3" id="style-3" onchange="document.getElementById('style-all').checked = false">
+                  <label class="form-check-label small text-dark" for="style-3">Exceção (Busca pela Incorreta)</label>
+                </div>
+                <div class="form-check mb-1">
+                  <input class="form-check-input quiz-style-check" type="checkbox" value="4" id="style-4" onchange="document.getElementById('style-all').checked = false">
+                  <label class="form-check-label small text-dark" for="style-4">Análise de Afirmações (I, II, III...)</label>
+                </div>
+                <div class="form-check mb-1">
+                  <input class="form-check-input quiz-style-check" type="checkbox" value="5" id="style-5" onchange="document.getElementById('style-all').checked = false">
+                  <label class="form-check-label small text-dark" for="style-5">Sequência Lógica (V / F)</label>
+                </div>
+                <div class="form-check mb-1">
+                  <input class="form-check-input quiz-style-check" type="checkbox" value="8" id="style-8" onchange="document.getElementById('style-all').checked = false">
+                  <label class="form-check-label small text-dark" for="style-8">Asserção e Razão (Estilo Enade)</label>
+                </div>
+                <div class="form-check mb-1">
+                  <input class="form-check-input quiz-style-check" type="checkbox" value="9" id="style-9" onchange="document.getElementById('style-all').checked = false">
+                  <label class="form-check-label small text-dark" for="style-9">Somatória (Estilo UFPR/UFSC)</label>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       `;
@@ -113,7 +156,7 @@ const ToolRegistry = {
       sub.innerHTML = `
         <div class="d-flex align-items-center gap-3 w-100 flex-wrap">
           <div class="d-flex align-items-center me-2">${getApiBadgeHtml()}</div>
-          <div class="text-secondary small fw-bold">
+          <div class="text-secondary small fw-bold mt-2">
             Converse diretamente com os seus materiais de estudo.
           </div>
         </div>
@@ -137,6 +180,13 @@ const ToolRegistry = {
               <option value="detalhado" selected>Profundo / Detalhado</option>
             </select>
           </div>
+          <div>
+            <label class="small fw-bold text-secondary mb-1">Layout do Mapa</label>
+            <select id="ia-mindmap-layout" class="form-select form-select-sm shadow-sm" style="width: 160px;">
+              <option value="TD" selected>Cima para Baixo</option>
+              <option value="LR">Esquerda para Direita</option>
+            </select>
+          </div>
         </div>
       `;
     },
@@ -152,19 +202,26 @@ const ToolRegistry = {
         <div class="d-flex align-items-center gap-3 w-100 flex-wrap">
           <div class="d-flex align-items-center me-2">${getApiBadgeHtml()}</div>
           <div>
-            <label class="small fw-bold text-secondary mb-1">Quantidade de Cartões</label>
+            <label class="small fw-bold text-secondary mb-1">Nº de Cartões</label>
             <input type="number" id="ia-cards-count" class="form-control form-control-sm shadow-sm text-center" value="10" min="1" max="50" style="width: 80px;">
           </div>
-          <div class="text-secondary small fw-bold mt-3">
-             Gera pares de Pergunta e Resposta para memorização ativa (Anki-style).
+          <div>
+            <label class="small fw-bold text-secondary mb-1">Profundidade</label>
+            <select id="ia-cards-level" class="form-select form-select-sm shadow-sm" style="width: 160px;">
+              <option value="básico">Conceitos Básicos</option>
+              <option value="médio" selected>Intermédio</option>
+              <option value="avançado">Avançado / Casos</option>
+            </select>
+          </div>
+          <div class="text-secondary small fw-bold mt-2 w-100">
+             Gera um baralho interativo de Frente/Verso focado em retenção ativa (Estilo Anki).
           </div>
         </div>
       `;
     },
     init: () => { appMode = 'flashcards'; }
   }
-};
-
+}
 
 /* --------------------------------------------------------------------------
    3. ORQUESTRADOR CENTRAL (Abertura e Execução de Ferramentas)
@@ -208,16 +265,50 @@ window.openTool = function(toolId) {
   }
 };
 
+/* --------------------------------------------------------------------------
+   ACIONADOR PRINCIPAL DE PROCESSAMENTO DA MESA
+   -------------------------------------------------------------------------- */
 window.processarPdfFinal = async function() {
   if (!pdfState || !pdfState.length) {
     if (typeof showToast === "function") showToast("A mesa de estudos está vazia. Adicione material primeiro.", "warning");
     return;
   }
 
+  // Identifica a ferramenta pela variável global ou pelo seletor HTML
+  const acao = typeof currentTool !== 'undefined' && currentTool ? currentTool : (document.getElementById('seletor-ferramenta-mesa') ? document.getElementById('seletor-ferramenta-mesa').value : null);
+  const btnFinalizar = document.getElementById('btn-finalizar');
+
+  if (!acao) {
+    if(typeof showToast === 'function') showToast("Muuu! Selecione uma ferramenta no menu primeiro.", "warning");
+    return;
+  }
+
+  const totalMateriais = pdfState.length;
+  const selecionados = pdfState.filter(p => p.selected).length;
+
+  let deveAguardar = false;
+
+  // Lógica de Roteamento Visual com Base na Seleção
+  if (selecionados === 0) {
+    if(typeof showToast === 'function') showToast("Nenhum item selecionado. O sistema processará TODO o conteúdo da mesa...", "info");
+    deveAguardar = true;
+  } else if (selecionados > 0 && selecionados < totalMateriais) {
+    if(typeof showToast === 'function') showToast(`Atenção: O sistema processará APENAS os ${selecionados} itens selecionados...`, "info");
+    deveAguardar = true;
+  }
+
+  // Bloqueia o botão para evitar múltiplos cliques
+  if (btnFinalizar) btnFinalizar.disabled = true;
+
+  // Aguarda 5 segundos de forma assíncrona se o utilizador não selecionou tudo
+  if (deveAguardar) {
+    await new Promise(resolve => setTimeout(resolve, 5000));
+  }
+
   if (typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal("A preparar o ambiente de estudo...");
 
   try {
-    switch(currentTool) {
+    switch(acao) {
       case 'ocr':            
         await executarOCR(); 
         break;
@@ -239,13 +330,20 @@ window.processarPdfFinal = async function() {
         if(typeof executarIA === 'function') await executarIA('flashcards'); 
         break;
       default: 
-        throw new Error(`A ferramenta "${currentTool}" não está mapeada para a área de estudos.`);
+        throw new Error(`A ferramenta "${acao}" não está mapeada para a área de estudos.`);
     }
   } catch (err) {
     console.error("Erro no processamento:", err);
-    if (typeof showToast === "function") showToast(err.message || "Erro ao processar.", "error");
+    // A VAQUINHA ASSUME O CONTROLE AQUI TAMBÉM:
+    if (typeof window.exibirErroAmigavelIA === 'function') {
+        window.exibirErroAmigavelIA(err);
+    } else {
+        if (typeof showToast === "function") showToast(err.message || "Erro ao processar.", "error");
+    }
   } finally {
     if (typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
+    // Reabilita o botão após terminar
+    if (btnFinalizar) btnFinalizar.disabled = false;
   }
 };
 
@@ -424,15 +522,22 @@ window.iniciarLeituraDeEdital = async function(file, cargoAlvo, nivelAlvo) {
     return;
   }
 
-  if(typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal(`A dissecar Quadro de Provas e Anexos para: ${cargoAlvo}...`);
+  // GATILHO DE SEGURANÇA: Acorda o motor de PDF caso a pessoa não tenha ido à Mesa de Estudos ainda!
+  if (typeof PDF_STUDIO_INIT === 'function') PDF_STUDIO_INIT();
+  
+  if (!pdfjsLib) {
+      alert("O motor de leitura de PDF está a aquecer. Por favor, feche esta janela e clique no botão novamente em 2 segundos.");
+      return;
+  }
 
+  if(typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal(`A dissecar Quadro de Provas e Anexos para: ${cargoAlvo}...`);
   try {
     const arrayBuffer = await file.arrayBuffer();
     const typedarray = new Uint8Array(arrayBuffer);
     const pdf = await pdfjsLib.getDocument({ data: typedarray }).promise;
     
     let rawText = "";
-    const maxPages = Math.min(pdf.numPages, 60); 
+    const maxPages = Math.min(pdf.numPages, 60);
     for (let i = 1; i <= maxPages; i++) {
       const page = await pdf.getPage(i);
       const textContent = await page.getTextContent();
@@ -441,15 +546,16 @@ window.iniciarLeituraDeEdital = async function(file, cargoAlvo, nivelAlvo) {
 
     const prompt = `Atue como um Especialista em Planeamento de Estudos para Concursos Públicos.
     O candidato deseja organizar os estudos ESPECIFICAMENTE para o cargo/vaga de "${cargoAlvo}" (Escolaridade: ${nivelAlvo}).
-
     INSTRUÇÕES DE EXTRAÇÃO ABSOLUTA E CRÍTICA:
-    1. QUADRO DE PROVAS (PESOS REAIS): Localize no documento a tabela ou secção chamada "Estrutura das Provas", "Quadro de Provas" ou "Avaliação". Encontre as matérias exatas para o cargo "${cargoAlvo}" ou para a escolaridade "${nivelAlvo}". Extraia o PESO exato (ou valor em pontos de cada questão) definido nas regras. É PROIBIDO inventar pesos.
+    1. QUADRO DE PROVAS (PESOS REAIS): Localize no documento a tabela ou secção chamada "Estrutura das Provas", "Quadro de Provas" ou "Avaliação".
+    Encontre as matérias exatas para o cargo "${cargoAlvo}" ou para a escolaridade "${nivelAlvo}".
+    Extraia o PESO exato (ou valor em pontos de cada questão) definido nas regras. É PROIBIDO inventar pesos.
     2. CONTEÚDO PROGRAMÁTICO (TÓPICOS): Localize a secção de Conteúdos Programáticos (geralmente nos anexos finais).
     3. CRUZAMENTO DE DADOS: 
        - Para as matérias básicas (como Língua Portuguesa, Legislação, Informática), procure os tópicos que estão agrupados sob a secção de "${nivelAlvo}".
-       - Para a matéria de "Conhecimentos Específicos", localize EXATAMENTE o bloco de texto referente ao cargo "${cargoAlvo}". IGNORE ABSOLUTAMENTE os conhecimentos específicos de outros cargos.
+       - Para a matéria de "Conhecimentos Específicos", localize EXATAMENTE o bloco de texto referente ao cargo "${cargoAlvo}".
+    IGNORE ABSOLUTAMENTE os conhecimentos específicos de outros cargos.
     4. Quebre o bloco de texto de cada matéria numa lista lógica e fragmentada de tópicos de estudo.
-
     RETORNO OBRIGATÓRIO (JSON PURO, SEM MARKDOWNS, SEM TEXTO INTRODUTÓRIO):
     {
       "titulo": "${cargoAlvo}",
@@ -463,7 +569,6 @@ window.iniciarLeituraDeEdital = async function(file, cargoAlvo, nivelAlvo) {
         }
       ]
     }`;
-
     const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=" + apiKey, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -472,26 +577,18 @@ window.iniciarLeituraDeEdital = async function(file, cargoAlvo, nivelAlvo) {
         generationConfig: { temperature: 0.1 }
       })
     });
-
     const data = await response.json();
     if (data.error) throw new Error(data.error.message);
     
     let jsonString = data.candidates[0].content.parts[0].text;
     jsonString = jsonString.replace(/```json/g, '').replace(/```/g, '').trim();
-    
     jornadaPendenteValidacao = JSON.parse(jsonString);
 
     renderizarRevisaoEdital(jornadaPendenteValidacao);
 
   } catch (error) {
-    console.error("Erro na leitura da IA:", error);
-    
-    // Tratamento amigável para quando o servidor da Google estiver sobrecarregado
-    if (error.message.includes("high demand") || error.message.includes("503") || error.message.includes("overloaded")) {
-        alert("A Inteligência Artificial da Google está com muitos acessos neste momento. Por favor, aguarde 15 segundos e tente novamente!");
-    } else {
-        alert("Falha na Leitura IA: " + error.message);
-    }
+    // 🐮 AQUI ENTRA A NOSSA VAQUINHA EMPÁTICA
+    window.exibirErroAmigavelIA(error);
     
   } finally {
     if(typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
@@ -624,4 +721,45 @@ window.salvarNovaJornada = function() {
       alert("Falha de conexão com o servidor. Verifique a autorização no Apps Script.");
   }).salvarJornadaBD(email, jornadaPendenteValidacao);
 };
+
+/* ==========================================================================
+   MOTOR DE EMPATIA: TRATAMENTO DE ERROS DA IA
+   ========================================================================== */
+window.exibirErroAmigavelIA = function(erroOriginal) {
+    let mensagemAmigavel = "Muuuu! 🐮 Eita, o trator deu uma engasgada nas conexões neurais. Ocorreu um erro inesperado. Pode tentar novamente em alguns segundos?";
+    let strErro = String(erroOriginal).toLowerCase();
+
+    // 1. Erro de Chave API (Falta de configuração ou chave inválida)
+    if (strErro.includes("key") || strErro.includes("api") || strErro.includes("auth") || strErro.includes("unauthorized")) {
+        mensagemAmigavel = "Muuuu! 🔑 A chave do celeiro da IA (API Key) parece inválida ou não foi configurada. Verifique o painel de configurações!";
+    } 
+    // 2. Erro de Tempo Esgotado (Material muito grande)
+    else if (strErro.includes("timeout") || strErro.includes("tempo") || strErro.includes("deadline")) {
+        mensagemAmigavel = "Muuuu! ⏳ O pasto estava muito grande! A leitura demorou demais e a IA precisou descansar. Tente processar um pedaço menor do texto.";
+    } 
+    // 3. Erro de Limite de Cota (Rate limit do Google/Gemini)
+    else if (strErro.includes("quota") || strErro.includes("limit") || strErro.includes("429")) {
+        mensagemAmigavel = "Muuuu! 🌾 Esgotamos o capim mágico por agora! A inteligência artificial atingiu o limite de consultas por minuto. Respire fundo e tente em breve.";
+    }
+    // 4. Erro de Servidor Indisponível (500, 503)
+    else if (strErro.includes("500") || strErro.includes("503") || strErro.includes("unavailable")) {
+        mensagemAmigavel = "Muuuu! 🌩️ Uma tempestade passou pelos nossos servidores. A conexão caiu, mas nossa equipe de tratoristas já está verificando. Tente novamente!";
+    }
+    // 5. Erro de Formato ou Texto Incompreensível
+    else if (strErro.includes("parse") || strErro.includes("json") || strErro.includes("format")) {
+        mensagemAmigavel = "Muuuu! 🧩 O resultado saiu mastigado demais e não consegui organizar. A IA se confundiu com o formato. Vamos tentar reescrever o pedido?";
+    }
+
+    // Dispara visualmente para o usuário usando o Toast ou Alert
+    if (typeof showToast === 'function') {
+        // Se o seu Toast suportar tempo, coloque uns 6 segundos para dar tempo de ler
+        showToast(mensagemAmigavel, "error"); 
+    } else {
+        alert(mensagemAmigavel);
+    }
+    
+    // Log técnico oculto para você investigar no F12 depois
+    console.warn("🚨 [Log Técnico de IA Oculto]:", erroOriginal);
+};
+
 </script>
