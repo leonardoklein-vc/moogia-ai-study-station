@@ -1,6 +1,9 @@
 <script>
 /* ==========================================================================
    MÓDULO 16: MOTOR DE GAMIFICAÇÃO, AGENDA E JORNADAS
+   VERSÃO PÚBLICA SANITIZADA
+   Atenção: credenciais, IDs reais, assets proprietários e trechos estratégicos
+   foram substituídos por placeholders para publicação em repositório público.
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
@@ -91,7 +94,7 @@ window.dispararAcaoGamificacao = function(gatilhoAcao, eventClick = null) {
                 SafeStorage.setItem('moogia_badges', JSON.stringify(unlockedBadges));
                 
                 if (typeof showToast === 'function') {
-                    showToast("🏆 CONQUISTA DESBLOQUEADA: " + conq.nome + "! +" + conq.bonus + " PR!", "warning");
+                    showToast("CONQUISTA_DESBLOQUEADA: " + conq.nome + " +" + conq.bonus + " PR!", "warning");
                 }
                 ganharXP(conq.bonus, eventClick);
             }
@@ -111,7 +114,7 @@ function ganharXP(pontosGanhos, eventClick = null) {
     if (horaAtual >= 1 && horaAtual <= 4) {
         if (!localStorage.getItem('badge_corujinha')) {
             localStorage.setItem('badge_corujinha', 'true');
-            if (typeof showToast === 'function') showToast("🏆 Conquista: Vaca Corujinha! Ganhaste +50 PR bónus por estudares de madrugada!", "warning");
+            if (typeof showToast === 'function') showToast("CONQUISTA_EXEMPLO_DESBLOQUEADA", "warning");
             globalXP += 50; 
         }
     }
@@ -156,8 +159,8 @@ function atualizarBarrasXP() {
     if(painelLevel) painelLevel.innerText = globalLevel;
     if(painelBar) painelBar.style.width = percentagem + "%";
     
-    let patenteAtual = "Estudante Novato";
-    let imagemAtual = "https://i.ibb.co/5WHfDf0R/vaquinha.png"; 
+    let patenteAtual = "TITULO_EXEMPLO_INICIAL";
+    let imagemAtual = "SUA_URL_DE_ASSET_AQUI"; 
     
     if (RegrasMoogIA.niveis && RegrasMoogIA.niveis.length > 0) {
         let nivelEncontrado = RegrasMoogIA.niveis.find(n => globalLevel <= n.teto);
@@ -165,9 +168,9 @@ function atualizarBarrasXP() {
         patenteAtual = nivelEncontrado.titulo;
         imagemAtual = nivelEncontrado.imagem;
     } else {
-        if (globalLevel <= 5) patenteAtual = "Bezerro Desmamado";
-        else if (globalLevel <= 10) patenteAtual = "Vaquinha de Presépio";
-        else patenteAtual = "Vaquinha Mestre";
+        if (globalLevel <= 5) patenteAtual = "TITULO_EXEMPLO_1";
+        else if (globalLevel <= 10) patenteAtual = "TITULO_EXEMPLO_2";
+        else patenteAtual = "TITULO_EXEMPLO_FINAL";
     }
 
     if(painelRank) painelRank.innerText = patenteAtual;
@@ -205,7 +208,7 @@ function animarVaquinhaLevelUp() {
 /* --------------------------------------------------------------------------
    LÓGICA DE VINCULAÇÃO (MESA -> JORNADA)
    -------------------------------------------------------------------------- */
-const materiasAtivasMock = ["Engenharia de Software", "Banco de Dados", "Segurança da Informação"];
+const materiasAtivasMock = ["DISCIPLINA_EXEMPLO_1", "DISCIPLINA_EXEMPLO_2", "DISCIPLINA_EXEMPLO_3"];
 
 function abrirModalVincularJornada() {
     if (typeof pdfState === 'undefined' || !pdfState || pdfState.length === 0) {
@@ -226,7 +229,7 @@ function confirmarVinculoJornada(event) {
     const materia = select ? select.value : 'Geral';
     const modalEl = document.getElementById('modalVincularJornada');
     if (modalEl) { try { bootstrap.Modal.getInstance(modalEl).hide(); } catch(e) {} }
-    if (typeof showToast === 'function') showToast("Materiais arquivados no Cofre de " + materia + ".", "success");
+    if (typeof showToast === 'function') showToast("Materiais arquivados no Repositório de " + materia + ".", "success");
     ganharXP(15, event || { clientX: window.innerWidth/2, clientY: window.innerHeight/2 });
 }
 
@@ -237,9 +240,9 @@ function gerarTarefasDaAgendaMock() {
     const container = document.getElementById('agenda-tasks-container');
     if(!container) return;
     const tarefas = [
-        { id: 'task-1', tempo: '2h', materia: 'Engenharia de Software', topico: 'Padrões de Projeto (MVC, Singleton)', xp: 50 },
-        { id: 'task-2', tempo: '1h', materia: 'Banco de Dados', topico: 'Revisão: Normalização (1FN a 3FN)', xp: 30 },
-        { id: 'task-3', tempo: '30m', materia: 'Simulado IA', topico: 'Fazer 15 questões de Segurança', xp: 20 }
+        { id: 'task-1', tempo: '2h', materia: 'DISCIPLINA_EXEMPLO_1', topico: 'TOPICO_EXEMPLO_1', xp: 50 },
+        { id: 'task-2', tempo: '1h', materia: 'DISCIPLINA_EXEMPLO_2', topico: 'TOPICO_EXEMPLO_2', xp: 30 },
+        { id: 'task-3', tempo: '30m', materia: 'ATIVIDADE_EXEMPLO', topico: 'TOPICO_EXEMPLO_3', xp: 20 }
     ];
     let html = "";
     tarefas.forEach(t => {
@@ -323,7 +326,7 @@ function renderizarGridJornadas() {
         card += '<ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3 p-1"><li><a class="dropdown-item d-flex align-items-center gap-2 small py-2 rounded-2" href="#" onclick="executarRenomearJornada(\'' + safeId + '\', \'' + safeTitulo + '\')"><i class="material-icons text-primary" style="font-size:16px;">edit</i> Renomear Jornada</a></li>';
         card += '<li><hr class="dropdown-divider opacity-25"></li><li><a class="dropdown-item d-flex align-items-center gap-2 small text-danger py-2 rounded-2" href="#" onclick="executarExcluirJornada(\'' + safeId + '\', \'' + safeTitulo + '\')"><i class="material-icons text-danger" style="font-size:16px;">delete</i> Arquivar/Excluir</a></li></ul></div></div>';
         card += '<h5 class="fw-bold text-dark mb-2" style="line-height: 1.3;">' + safeTitulo + '</h5>';
-        card += '<div class="d-flex flex-wrap gap-3 mt-3 text-muted small"><span title="Matérias Mapeadas"><i class="material-icons align-middle" style="font-size: 16px;">category</i> ' + numMaterias + ' áreas</span><span title="Materiais no Cofre"><i class="material-icons align-middle" style="font-size: 16px;">folder_zip</i> ' + totalMateriais + ' docs</span></div>';
+        card += '<div class="d-flex flex-wrap gap-3 mt-3 text-muted small"><span title="Matérias Mapeadas"><i class="material-icons align-middle" style="font-size: 16px;">category</i> ' + numMaterias + ' áreas</span><span title="Materiais no Repositório"><i class="material-icons align-middle" style="font-size: 16px;">folder_zip</i> ' + totalMateriais + ' docs</span></div>';
         card += '<hr class="opacity-25 my-3"><div class="d-flex justify-content-between align-items-center mt-auto">' + statusRoteiro + '<button class="btn btn-primary btn-sm rounded-pill px-4 fw-bold shadow-sm" onclick="abrirGerenciadorJornada(\'' + safeId + '\')">Acessar Jornada</button></div></div></div>';
         
         htmlFinal += card;
@@ -355,7 +358,7 @@ window.abrirGerenciadorJornada = function(id) {
         atualizarSeletorTopicosMateriais();
     }
 
-    renderizarMateriaisDoCeleiro();
+    renderizarMateriaisDoRepositório();
     renderizarArvoreDisciplinas();
 
     const modalEl = document.getElementById('modalPainelJornada');
@@ -388,8 +391,8 @@ window.atualizarSeletorTopicosMateriais = function() {
     containerTopicos.innerHTML = topHTML;
 };
 
-function renderizarMateriaisDoCeleiro() {
-    const listaHtml = document.getElementById('jor-lista-materiais-cofre');
+function renderizarMateriaisDoRepositório() {
+    const listaHtml = document.getElementById('jor-lista-materiais-repositório');
     const badgeTotal = document.getElementById('jor-badge-total-materiais');
     if(!listaHtml) return;
 
@@ -420,7 +423,7 @@ function renderizarMateriaisDoCeleiro() {
                 itemHtml += '<div class="overflow-hidden"><h6 class="mb-0 fw-bold text-dark text-truncate" title="' + escapeHtml(mat.nome) + '">' + escapeHtml(mat.nome) + '</h6>';
                 itemHtml += '<small class="text-muted d-flex align-items-center gap-1" style="font-size:11px;"><i class="material-icons" style="font-size: 12px;">event</i> Indexado em: ' + (mat.data || 'Recente') + '</small></div></div>';
                 itemHtml += '<div class="d-flex gap-1"><button class="btn btn-primary btn-sm rounded-pill px-3 fw-bold shadow-sm d-flex align-items-center gap-1" onclick="levarMaterialParaMesa(\'' + escapeHtml(mat.url) + '\', \'' + escapeHtml(mat.nome) + '\', \'' + mat.tipo + '\')"><i class="material-icons fs-6">build_circle</i> Estudar</button>';
-                itemHtml += '<button class="btn btn-sm btn-light border text-danger p-1 rounded-circle" onclick="executarExcluirMaterialCeleiro(' + mIdx + ', ' + matIdx + ')" title="Excluir Material"><i class="material-icons fs-6">delete</i></button></div></div>';
+                itemHtml += '<button class="btn btn-sm btn-light border text-danger p-1 rounded-circle" onclick="executarExcluirMaterialRepositório(' + mIdx + ', ' + matIdx + ')" title="Excluir Material"><i class="material-icons fs-6">delete</i></button></div></div>';
                 itemHtml += '<div class="d-flex flex-wrap align-items-center gap-1 mt-1 border-top pt-2"><span class="badge bg-primary-subtle text-primary border text-truncate d-inline-block align-middle" style="max-width: 150px; font-size:10px; margin-bottom:2px;" title="Módulo: ' + escapeHtml(m.nome) + '">Módulo: ' + escapeHtml(m.nome) + '</span> ' + (badgesTopicos || '<span class="text-muted" style="font-size:10px; font-style:italic;">Sem tópicos vinculados</span>') + '</div></div>';
                 
                 poolCards += itemHtml;
@@ -431,7 +434,7 @@ function renderizarMateriaisDoCeleiro() {
     if(badgeTotal) badgeTotal.innerText = totalItens + " Itens Mapeados";
 
     if(poolCards === "") {
-        listaHtml.innerHTML = '<div class="text-center p-5 text-muted"><i class="material-icons opacity-25 mb-2" style="font-size:40px;">inventory</i><p class="small m-0">Celeiro vazio. Use o painel à esquerda para indexar apostilas ou vídeos!</p></div>';
+        listaHtml.innerHTML = '<div class="text-center p-5 text-muted"><i class="material-icons opacity-25 mb-2" style="font-size:40px;">inventory</i><p class="small m-0">Repositório vazio. Use o painel à esquerda para indexar apostilas ou vídeos!</p></div>';
     } else {
         listaHtml.innerHTML = poolCards;
     }
@@ -468,7 +471,7 @@ window.levarMaterialParaMesa = function(url, nome, tipo) {
         return;
     }
 
-    if(typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal(`Transferindo [${nome}] do Celeiro...`);
+    if(typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal(`Transferindo [${nome}] do Repositório...`);
     
     // 4. Puxa o Ficheiro Físico do Google Drive
     google.script.run
@@ -496,20 +499,20 @@ window.levarMaterialParaMesa = function(url, nome, tipo) {
                 }
             } else {
                 if(typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
-                alert("Erro ao puxar o arquivo do Celeiro: " + resp.error);
+                alert("Erro ao puxar o arquivo do Repositório: " + resp.error);
             }
         })
         .withFailureHandler(err => {
             if(typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
-            alert("Falha de rede ao tentar acessar o Celeiro.");
+            alert("Falha de rede ao tentar acessar o Repositório.");
         })
-        .obterFicheiroDoDriveBase64(url);
+        .SUA_ID_AQUI(url);
 };
 
 // ==========================================================================
 // CRUD NO PLANILHA VIA JSON ACERVO (CELEIRO)
 // ==========================================================================
-window.executarUploadFicheiroCeleiro = function(files) {
+window.executarUploadFicheiroRepositório = function(files) {
     if(!files || files.length === 0) return;
     const seletorMateria = document.getElementById('jor-material-materia-seletor');
     const mIdx = seletorMateria.value;
@@ -525,7 +528,7 @@ window.executarUploadFicheiroCeleiro = function(files) {
     const checkedBoxes = document.querySelectorAll('.jor-topic-check:checked');
     const topicosMapeados = Array.from(checkedBoxes).map(cb => cb.value);
 
-    mostrarLoaderGlobal("Enviando arquivo para a pasta MoogIA_Assets no seu Drive...");
+    mostrarLoaderGlobal("Enviando arquivo para a pasta SUA_PASTA_DE_ASSETS_AQUI no seu Drive...");
     
     const reader = new FileReader();
     reader.onloadend = function() {
@@ -540,7 +543,7 @@ window.executarUploadFicheiroCeleiro = function(files) {
                     topicos: topicosMapeados,
                     data: new Date().toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit', year:'numeric'})
                 });
-                salvarModificacoesDoCeleiroNoServidor("Ficheiro indexado e mapeado com sucesso!");
+                salvarModificacoesDoRepositórioNoServidor("Ficheiro indexado e mapeado com sucesso!");
                 
                 // GATILHO DA GAMIFICAÇÃO INJETADO AQUI
                 if (typeof dispararAcaoGamificacao === 'function') dispararAcaoGamificacao('upload_pdf');
@@ -555,7 +558,7 @@ window.executarUploadFicheiroCeleiro = function(files) {
     reader.readAsDataURL(file);
 };
 
-window.executarAdicionarLinkCeleiro = function() {
+window.executarAdicionarLinkRepositório = function() {
     const inputUrl = document.getElementById('jor-upload-url-real');
     const seletorMateria = document.getElementById('jor-material-materia-seletor');
     const mIdx = seletorMateria.value;
@@ -579,7 +582,7 @@ window.executarAdicionarLinkCeleiro = function() {
         data: new Date().toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit', year:'numeric'})
     });
 
-    salvarModificacoesDoCeleiroNoServidor("Link indexado com sucesso!");
+    salvarModificacoesDoRepositórioNoServidor("Link indexado com sucesso!");
     
     // GATILHO DA GAMIFICAÇÃO INJETADO AQUI
     if (typeof dispararAcaoGamificacao === 'function') dispararAcaoGamificacao('upload_pdf');
@@ -587,10 +590,10 @@ window.executarAdicionarLinkCeleiro = function() {
     inputUrl.value = ""; 
 };
 
-window.executarExcluirMaterialCeleiro = function(materiaIndex, materialIndex) {
-    if(!confirm("Deseja realmente remover permanentemente este material do Celeiro?")) return;
+window.executarExcluirMaterialRepositório = function(materiaIndex, materialIndex) {
+    if(!confirm("Deseja realmente remover permanentemente este material do Repositório?")) return;
     jAtiva.materias[materiaIndex].materiais.splice(materialIndex, 1);
-    salvarModificacoesDoCeleiroNoServidor("Material removido do acervo.");
+    salvarModificacoesDoRepositórioNoServidor("Material removido do acervo.");
 };
 
 function renderizarArvoreDisciplinas() {
@@ -631,7 +634,7 @@ window.executarAdicionarMateriaManual = function() {
     if(!nome || !nome.trim()) return;
     if(!jAtiva.materias) jAtiva.materias = [];
     jAtiva.materias.push({ nome: nome.trim(), peso: 1, materiais: [], topicos: [] });
-    salvarModificacoesDoCeleiroNoServidor("Disciplina anexada com sucesso!");
+    salvarModificacoesDoRepositórioNoServidor("Disciplina anexada com sucesso!");
     const seletorMateria = document.getElementById('jor-material-materia-seletor');
     if(seletorMateria) {
         let optHtml = "";
@@ -644,7 +647,7 @@ window.executarAdicionarMateriaManual = function() {
 window.executarExcluirMateriaManual = function(mIdx) {
     if(!confirm("Deseja realmente excluir esta disciplina? Todos os materiais vinculados a ela serão perdidos.")) return;
     jAtiva.materias.splice(mIdx, 1);
-    salvarModificacoesDoCeleiroNoServidor("Módulo removido da grade.");
+    salvarModificacoesDoRepositórioNoServidor("Módulo removido da grade.");
 };
 
 window.executarAdicionarTopicoManual = function(mIdx) {
@@ -652,20 +655,20 @@ window.executarAdicionarTopicoManual = function(mIdx) {
     if(!nomeTopico || !nomeTopico.trim()) return;
     if(!jAtiva.materias[mIdx].topicos) jAtiva.materias[mIdx].topicos = [];
     jAtiva.materias[mIdx].topicos.push(nomeTopico.trim());
-    salvarModificacoesDoCeleiroNoServidor("Novo assunto mapeado!");
+    salvarModificacoesDoRepositórioNoServidor("Novo assunto mapeado!");
     atualizarSeletorTopicosMateriais(); 
 };
 
 window.executarExcluirTopicoManual = function(mIdx, tIdx) {
     jAtiva.materias[mIdx].topicos.splice(tIdx, 1);
-    salvarModificacoesDoCeleiroNoServidor("Assunto removido.");
+    salvarModificacoesDoRepositórioNoServidor("Assunto removido.");
     atualizarSeletorTopicosMateriais();
 };
 
-function salvarModificacoesDoCeleiroNoServidor(mensagemSucesso) {
+function salvarModificacoesDoRepositórioNoServidor(mensagemSucesso) {
     const email = localStorage.getItem('usuario_email');
     if(!email || !jAtiva) return;
-    if(typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal("Sincronizando alterações na planilha mãe...");
+    if(typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal("Sincronizando alterações na base de dados...");
 
     google.script.run
         .withSuccessHandler(resp => {
@@ -681,13 +684,13 @@ function salvarModificacoesDoCeleiroNoServidor(mensagemSucesso) {
         })
         .withFailureHandler(err => {
             if(typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
-            alert("Queda de pacotes RPC de comunicação remota.");
+            alert("Falha de comunicação com o servidor.");
         })
         .salvarDadosCompletosJornadaBD(email, jAtiva.id, jAtiva);
 }
 
 function render_painel_remanescentes() {
-    renderizarMateriaisDoCeleiro();
+    renderizarMateriaisDoRepositório();
     renderizarHtmlAbasInternasEstaticas();
     if(typeof renderizarGridJornadas === 'function') renderizarGridJornadas();
 }
@@ -758,7 +761,7 @@ window.executarExcluirJornada = function(idJornada, titulo) {
         })
         .withFailureHandler(err => {
             if(typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
-            alert("Falha fatal na comunicação de banco de dados.");
+            alert("Falha de comunicação com o servidor.");
         })
         .deletarJornadaBD(email, idJornada);
 };
@@ -859,78 +862,17 @@ if (typeof escapeHtml !== 'function') {
 
 const moodicasDB = {
     'default': [
-        "Muuu! Bem-vindo à Estação. Escolhe uma ferramenta na Mesa de Estudos para começarmos a mastigar essa matéria!",
-        "Sabias que estudar em blocos de 25 minutos (Pomodoro) evita a fadiga mental? Até as vacas precisam de descansar entre pastagens.",
-        "Um ambiente organizado ajuda no foco. Limpa a mesa de materiais que já não usas! Um pasto limpo é um pasto feliz.",
-        "Técnica Feynman: Se não consegues explicar esta matéria a um bezerro de 5 anos, é porque ainda não aprendeste direito!",
-        "Estudar com sono é como tentar mugir debaixo d'água. Se estás a fechar os olhos, vai dormir e volta amanhã. O cérebro consolida a memória no sono!",
-        "A hidratação é vital! Bebe água. (Eu prefiro água, o leite é para os negócios).",
-        "A tua Vaquinha evolui contigo. Ganha XP cumprindo as missões da Agenda. Quem sabe não chegas a Vaquinha Mestre?",
-        "Rumina bem as ideias: estuda um pouco, faz uma pausa e volta ao assunto. A repetição é a mãe da retenção.",
-        "Muuuu! Não sejas gado indo sempre atrás dos resumos dos outros. Cria os teus próprios materiais aqui na Estação para fixar melhor!",
-        "Sentado há muito tempo? Levanta-te, estica os cascos e dá uma volta. O movimento ajuda na oxigenação do cérebro.",
-        "Se a ansiedade bater, respira fundo. Ninguém come um prado inteiro de uma só vez; é uma dentada de cada vez."
+        "DICA_PUBLICA_EXEMPLO_1",
+        "DICA_PUBLICA_EXEMPLO_2",
+        "DICA_PUBLICA_EXEMPLO_3"
     ],
-    'quiz_generator': [
-        "Dica de Mestre: Fazer testes ANTES de estudar ajuda o teu cérebro a focar no que é importante na hora de ler. É o chamado 'Pré-teste'!",
-        "A repetição ativa com simulados aumenta a retenção em até 40%. É musculação para os neurónios!",
-        "Achas que sabes tudo? Pede-me um quiz nível 'Concurso' e vamos ver quem muge por último.",
-        "Simulados são como treinos de pastoreio: preparam-te para não fugires do rebanho no dia da prova.",
-        "Errar no simulado é adubo para o cérebro. Cresce com os erros e não te desmotives!",
-        "Gerar 50 questões de uma vez? Calma aí, vaqueiro! O ideal são blocos de 10 a 15 para não fritares os miolos.",
-        "Usa o gabarito comentado! Ler a explicação da IA sobre o porquê de teres errado é de onde o verdadeiro leite da sabedoria é ordenhado.",
-        "Tenta acertar na resposta mentalmente antes de olhares para as opções. Isso chama-se Evocação Ativa!"
-    ],
-    'summarize': [
-        "Textos gigantes assustam. Pede um 'Resumo Executivo' para criar uma visão geral antes de ires a fundo na relva alta!",
-        "Dica: Usa a opção 'Tópicos Principais' para gerar pontos chave. Fardos de palha compactos são mais fáceis de mastigar.",
-        "Resumir não é só cortar palavras, é extrair a nata do conhecimento!",
-        "Muuuuita informação? Pede à IA para focar estritamente no que é cobrado em provas ou concursos.",
-        "Depois de leres o resumo gerado, olha para o lado e tenta explicá-lo em voz alta. Se engasgares, volta à leitura!",
-        "Não confies cegamente. A IA é esperta, mas tu és o dono da fazenda. Confere se os conceitos vitais estão corretos no material original.",
-        "Um bom resumo deve ser como um bom queijo: curado, direto e sem pontas soltas."
-    ],
-    'chat': [
-        "O teu Tutor IA não morde (nem dá coices). Conversa com a tua matéria para não adormeceres a ler PDFs gigantescos!",
-        "Sejas específico! Quanto mais contexto deres na tua pergunta, mais precisa será a resposta da IA.",
-        "Dificuldades num conceito? Usa o prompt: 'Finge que sou um bezerro e explica-me isto como se eu tivesse 10 anos'.",
-        "Prompt de ouro: 'Cria uma analogia do dia a dia para me ajudar a entender [inserir conceito difícil]'.",
-        "Se a IA inventar (alucinar) dados, puxa-lhe as orelhas! Avisa: 'Tens a certeza? Confirma isso no texto base'.",
-        "Dizer apenas 'não entendi nada' faz a IA chorar leite derramado. Diz-lhe EXATAMENTE onde te perdeste na explicação.",
-        "Pede à IA para te sabatinar! Prompt: 'Faz-me uma pergunta aberta sobre este tema e avalia a minha resposta'."
-    ],
-    'mindmap': [
-        "Os mapas mentais ativam o hemisfério direito do cérebro. Aprenda a ver o pasto inteiro antes de comer a primeira erva!",
-        "Comece pelo centro e vá destrinchando. É assim que a natureza (e o teu cérebro) organiza a informação.",
-        "Mapas mentais são como as teias de aranha do conhecimento. E eu adoro pastar perto delas!",
-        "Se o mapa mental ficar gigante, dá zoom na ferramenta! Não queremos que fiques estrábico.",
-        "Usa os mapas gerados como índice de revisão: passa os olhos pelos ramos principais todos os dias de manhã.",
-        "Guarda o PNG do mapa mental e põe como fundo de ecrã do telemóvel na semana da prova. Memorização passiva ao poder!",
-        "O nível 'Estrutura Simples' é ótimo para revisões rápidas; o 'Detalhado' é para quando estás a desbravar a matéria pela primeira vez."
-    ],
-    'flashcards': [
-        "A repetição espaçada faz milagres. Avalie um cartão como 'Fácil' apenas se souberes MESMO a resposta de caras.",
-        "Cartões curtos são melhores que textões longos. Uma ideia central por cartão facilita a digestão do cérebro!",
-        "Flashcards são a arte de combater a Curva de Esquecimento. É por isso que não te esqueces do que jantaste ontem...",
-        "A regra de ouro: não escrevas a Bíblia num flashcard, ou levas um coice mental!",
-        "Não sejas teimoso como um touro: se erraste o cartão, sê honesto contigo mesmo e revê-o amanhã.",
-        "Os flashcards são os teus melhores amigos em filas de espera. Treina a tua mente enquanto a vida acontece lá fora.",
-        "Pede à IA para gerar perguntas práticas em vez de apenas conceitos teóricos. O cérebro adora resolver problemas!"
-    ],
-    'read_pdf': [
-        "Estudos indicam que ouvir a matéria enquanto se acompanha o texto visualmente melhora o foco. É a dobradinha bovina!",
-        "Usa o Leitor Imersivo quando estiveres com fadiga visual. Fecha os olhos, deita-te num pasto e deixa os ouvidos trabalharem.",
-        "Ouvir a matéria no Leitor TTS é como ouvir o mugido da mãe: constante, ritmado e instrutivo.",
-        "Acelera a velocidade de leitura se o teu cérebro processar a 2x! Mas não exageres ou parecerá que estamos a fugir de um trator.",
-        "Aproveita o Leitor de Áudio para estudares de olhos fechados e praticares a visualização mental da matéria. Isso cimenta a memória!"
-    ],
-    'ocr': [
-        "Lembre-se: Imagens com boa iluminação e sem sombras geram extrações incrivelmente mais precisas.",
-        "Este processo (OCR) transforma imagens paradas num pasto pesquisável pela Inteligência Artificial!",
-        "O meu olho biónico lê tudo, mas fotos tremidas dão-me dores de cabeça. Foca bem antes de clicares!",
-        "Se o teu caderno tem um garrancho que nem tu entendes, não esperes que a IA faça milagres. Caligrafia legível ajuda!",
-        "Podes fotografar quadros de aulas, slides ou livros da biblioteca. O OCR captura a alma do texto para dentro da tua Estação."
-    ]
+    'quiz_generator': ["DICA_PUBLICA_QUIZ_AQUI"],
+    'summarize': ["DICA_PUBLICA_RESUMO_AQUI"],
+    'chat': ["DICA_PUBLICA_CHAT_AQUI"],
+    'mindmap': ["DICA_PUBLICA_MAPA_AQUI"],
+    'flashcards': ["DICA_PUBLICA_FLASHCARD_AQUI"],
+    'read_pdf': ["DICA_PUBLICA_LEITURA_AQUI"],
+    'ocr': ["DICA_PUBLICA_OCR_AQUI"]
 };
 
 let mooDicaTimeout;
@@ -964,14 +906,14 @@ window.forcarNovaMooDica = function() {
 };
 
 /* ==========================================================================
-   GESTOR DE ADMINISTRAÇÃO DA GAMIFICAÇÃO (VERSÃO BLINDADA)
+   GESTOR DE ADMINISTRAÇÃO DA GAMIFICAÇÃO (VERSÃO PÚBLICA)
    ========================================================================== */
 
 const obterUrlImagemSegura = (url) => {
-    if (!url || typeof url !== 'string') return "https://i.ibb.co/5WHfDf0R/vaquinha.png";
+    if (!url || typeof url !== 'string') return "SUA_URL_DE_ASSET_AQUI";
     const urlLimpa = url.trim();
     if (urlLimpa.startsWith('http://') || urlLimpa.startsWith('https://')) return urlLimpa;
-    return "https://i.ibb.co/5WHfDf0R/vaquinha.png";
+    return "SUA_URL_DE_ASSET_AQUI";
 };
 
 window.carregarTabelasAdminGamificacao = function() {
@@ -985,7 +927,7 @@ window.carregarTabelasAdminGamificacao = function() {
                 regras.niveis.forEach(n => {
                     const imgSegura = obterUrlImagemSegura(n.imagem);
                     htmlNiv += '<tr><td class="fw-bold">Nível ' + n.teto + '</td><td>' + escapeHtml(n.titulo) + '</td>';
-                    htmlNiv += '<td><img src="' + imgSegura + '" style="height: 55px; width: 55px; object-fit: cover; cursor: pointer;" class="rounded-3 shadow-sm border border-2 border-white transition-hover" onclick="abrirModalImagemGrande(\'' + imgSegura + '\')" title="Clique para ampliar" onerror="this.onerror=null; this.src=\'https://i.ibb.co/5WHfDf0R/vaquinha.png\';"></td>';
+                    htmlNiv += '<td><img src="' + imgSegura + '" style="height: 55px; width: 55px; object-fit: cover; cursor: pointer;" class="rounded-3 shadow-sm border border-2 border-white transition-hover" onclick="abrirModalImagemGrande(\'' + imgSegura + '\')" title="Clique para ampliar" onerror="this.onerror=null; this.src=\'SUA_URL_DE_ASSET_AQUI\';"></td>';
                     htmlNiv += '<td><div class="d-flex gap-1"><button class="btn btn-sm btn-light border text-primary p-1" onclick="renomearNivelAdmin(' + n.teto + ', \'' + escapeHtml(n.titulo) + '\')" title="Renomear"><i class="material-icons fs-6">edit</i></button><button class="btn btn-sm btn-light border text-success p-1" onclick="alterarImagemNivelAdmin(' + n.teto + ')" title="Alterar Imagem"><i class="material-icons fs-6">image</i></button><button class="btn btn-sm btn-light border text-danger p-1" onclick="excluirRegra(\'Gamificacao_Niveis\', 1, ' + n.teto + ')" title="Excluir"><i class="material-icons fs-6">delete</i></button></div></td></tr>';
                 });
                 tNiveis.innerHTML = htmlNiv;
@@ -1005,7 +947,7 @@ window.carregarTabelasAdminGamificacao = function() {
                 let htmlConq = "";
                 regras.conquistas.forEach(c => {
                     const imgBadgeSegura = obterUrlImagemSegura(c.imagem);
-                    htmlConq += '<tr><td><img src="' + imgBadgeSegura + '" height="30" class="rounded-circle shadow-sm" onerror="this.onerror=null; this.src=\'https://i.ibb.co/5WHfDf0R/vaquinha.png\';"></td>';
+                    htmlConq += '<tr><td><img src="' + imgBadgeSegura + '" height="30" class="rounded-circle shadow-sm" onerror="this.onerror=null; this.src=\'SUA_URL_DE_ASSET_AQUI\';"></td>';
                     htmlConq += '<td class="fw-bold">' + escapeHtml(c.nome) + '</td><td class="font-monospace text-muted small">' + escapeHtml(c.alvo) + '</td><td>' + c.meta + 'x</td><td class="fw-bold text-warning">+' + c.bonus + ' PR</td><td><button class="btn btn-sm btn-outline-danger p-1" onclick="excluirRegra(\'Gamificacao_Conquistas\', 1, \'' + c.id + '\')"><i class="material-icons fs-6">delete</i></button></td></tr>';
                 });
                 tConquistas.innerHTML = htmlConq;
@@ -1110,7 +1052,7 @@ window.submeterFormularioNivel = function() {
         };
         reader.readAsDataURL(inputImg.files[0]);
     } else {
-        salvarFinal(inputUrl || "https://i.ibb.co/5WHfDf0R/vaquinha.png");
+        salvarFinal(inputUrl || "SUA_URL_DE_ASSET_AQUI");
     }
 };
 
@@ -1160,7 +1102,7 @@ window.submeterFormularioConquista = function() {
         };
         reader.readAsDataURL(inputImg.files[0]);
     } else {
-        salvarFinal("https://i.ibb.co/5WHfDf0R/vaquinha.png"); 
+        salvarFinal("SUA_URL_DE_ASSET_AQUI"); 
     }
 };
 
@@ -1218,7 +1160,7 @@ window.abrirMeuPerfil = function() {
     document.getElementById('perfil-xp-total').innerText = (typeof globalXP !== 'undefined' ? globalXP : 0) + " PR";
     document.getElementById('perfil-nivel').innerText = (typeof globalLevel !== 'undefined' ? globalLevel : 1);
     const rankEl = document.getElementById('painel-rank');
-    document.getElementById('perfil-rank').innerText = rankEl ? rankEl.innerText : 'Vaquinha Estudante';
+    document.getElementById('perfil-rank').innerText = rankEl ? rankEl.innerText : 'TITULO_EXEMPLO';
     
     // 2. Prepara a UI com Loaders para aguardar o Banco de Dados
     document.getElementById('perfil-jornadas-lista').innerHTML = '<div class="text-center p-4"><div class="spinner-border spinner-border-sm text-primary mb-2"></div><p class="small text-muted m-0">Sincronizando jornadas...</p></div>';
