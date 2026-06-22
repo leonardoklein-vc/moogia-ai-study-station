@@ -1,0 +1,445 @@
+<script>
+/* ==========================================================================
+   ESTAÇÃO DE ESTUDOS IA - FUNCIONALIDADES DE ESTUDO (js_views_estudo.html)
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. CHAT INTELIGENTE (COPILOTO IA)
+   -------------------------------------------------------------------------- */
+
+function alternarWorkspaceChat(ativar) {
+  const chatWorkspace = document.getElementById('chat-workspace');
+  const pdfGridArea = document.getElementById('pdf-preview-area'); 
+  const historyEl = document.getElementById('chat-history');
+
+  if (ativar) {
+    document.body.classList.add('mode-chat-active'); 
+    if(chatWorkspace) {
+      chatWorkspace.classList.remove('d-none');
+      chatWorkspace.style.display = 'flex';
+    }
+    if (pdfGridArea) pdfGridArea.style.display = 'none';
+    prepararWorkspaceDoChat();
+  } else {
+    document.body.classList.remove('mode-chat-active'); 
+    if(chatWorkspace) {
+      chatWorkspace.classList.add('d-none');
+      chatWorkspace.style.display = 'none';
+    }
+    if (pdfGridArea) pdfGridArea.style.display = 'flex'; 
+  }
+}
+
+function prepararWorkspaceDoChat() {
+  const sidebar = document.getElementById('chat-sidebar');
+  const historyEl = document.getElementById('chat-history');
+  const inputEl = document.getElementById('chat-input');
+  
+  if (!sidebar || !historyEl) return;
+
+  sidebar.innerHTML = '<div class="small fw-bold text-secondary mb-3 text-center">MATERIAIS NA MESA</div>';
+  
+  if (!pdfState || pdfState.length === 0) {
+    sidebar.innerHTML += '<div class="text-muted small text-center mt-3 p-2 border rounded" style="border-color: var(--border-color) !important;">A aguardar material de estudo...</div>';
+    historyEl.innerHTML = `
+      <div class="chat-bubble ai-bubble shadow-sm" style="border-left: 4px solid var(--danger);">
+        <div class="bubble-header" style="color: var(--danger);"><i class="material-icons">error_outline</i> Mesa Vazia</div>
+        Ainda não há nenhum material carregado na mesa. Adicione um documento para começarmos a estudar.
+      </div>`;
+    if(inputEl) inputEl.disabled = true;
+    return;
+  }
+
+  // Miniaturas na barra lateral do chat
+  pdfState.forEach((page, index) => {
+    const thumbDiv = document.createElement('div');
+    thumbDiv.className = 'text-center mb-3 position-relative';
+    thumbDiv.innerHTML = `
+      <img src="${page.thumbnailBase64}" style="width: 100%; max-width: 140px; border-radius: var(--radius-sm); box-shadow: var(--shadow-sm); background: var(--bg-card);">
+      <div class="small fw-bold text-muted mt-2">Pág. ${page.originalPageNum}</div>
+    `;
+    sidebar.appendChild(thumbDiv);
+  });
+
+  if (historyEl.innerHTML.trim() === '' || historyEl.innerHTML.includes('Mesa Vazia')) {
+      historyEl.innerHTML = `
+        <div class="chat-bubble ai-bubble shadow-sm" style="border-left: 4px solid var(--success);">
+          <div class="bubble-header" style="color: var(--success);"><i class="material-icons">task</i> Tudo Pronto</div>
+          Excelente! Já analisei as <b>${pdfState.length} página(s)</b> deste material. Que dúvidas tens sobre a matéria?
+        </div>`;
+  }
+  if(inputEl) inputEl.disabled = false;
+}
+
+async function enviarMensagemChat() {
+  const apiKey = localStorage.getItem('gemini_api_key');
+  
+  if (!apiKey) {
+    if (typeof showToast === 'function') showToast("Configure a chave do motor de IA primeiro.", "warning");
+    const modalEl = document.getElementById('modalConfiguracoes');
+    if (modalEl && typeof bootstrap !== 'undefined') {
+       const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+       bsModal.show();
+       const tabApi = document.querySelector('[data-bs-target="#config-api"]');
+       if(tabApi) tabApi.click();
+    }
+    return;
+  }
+
+  const inputEl = document.getElementById('chat-input');
+  const pergunta = inputEl.value.trim();
+  if (!pergunta) return;
+
+  const historyEl = document.getElementById('chat-history');
+  
+  historyEl.innerHTML += `
+    <div class="chat-bubble user-bubble shadow-sm">
+      <div class="bubble-header"><i class="material-icons">person</i> Você</div>
+      ${pergunta}
+    </div>`;
+  
+  inputEl.value = ""; inputEl.disabled = true; 
+  historyEl.scrollTop = historyEl.scrollHeight;
+
+  const typingId = 'typing-' + Date.now();
+  historyEl.innerHTML += `
+    <div id="${typingId}" class="chat-bubble ai-bubble shadow-sm">
+      <div class="bubble-header"><i class="material-icons">auto_awesome</i> Tutor IA</div>
+      <small class="text-muted font-monospace d-flex align-items-center gap-2">
+         <span class="spinner-grow spinner-grow-sm text-primary" role="status" style="width: 12px; height: 12px;"></span> A pesquisar nos teus apontamentos...
+      </small>
+    </div>`;
+  historyEl.scrollTop = historyEl.scrollHeight;
+
+  try {
+    const rawText = await extrairTextoDasPaginasSelecionadas(); 
+    
+    const prompt = "Aja como um tutor particular ajudando um aluno. " +
+    "REGRA 1: Responda a pergunta baseando-se ÚNICA E EXCLUSIVAMENTE no texto fornecido abaixo. Se não encontrar, diga de forma didática que não encontrou essa informação no material. " +
+    "REGRA 2: Se for apenas uma saudação, responda educadamente e pergunte o que o aluno deseja estudar. " +
+    "PERGUNTA DO ALUNO: " + pergunta;
+
+    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=" + apiKey, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt + "\n\nMATERIAL DE ESTUDO:\n" + rawText }] }],
+        generationConfig: { temperature: 0.3 } 
+      })
+    });
+
+    const data = await response.json();
+    if (data.error) throw new Error(data.error.message);
+    const respostaMarkdown = data.candidates[0].content.parts[0].text;
+
+    document.getElementById(typingId).remove();
+    
+    let htmlRes = respostaMarkdown
+      .replace(/\*\*(.*)\*\*/gim, '<b>$1</b>')
+      .replace(/\*(.*)\*/gim, '<i>$1</i>')
+      .replace(/\n/gim, '<br>');
+
+    historyEl.innerHTML += `
+      <div class="chat-bubble ai-bubble shadow-sm">
+        <div class="bubble-header"><i class="material-icons">auto_awesome</i> Tutor IA</div>
+        ${htmlRes}
+      </div>`;
+
+  } catch (error) {
+    document.getElementById(typingId).innerHTML = '<span class="text-danger"><i class="material-icons align-middle fs-6">error</i> Falha na comunicação: ' + error.message + '</span>';
+  } finally {
+    inputEl.disabled = false; inputEl.focus();
+    historyEl.scrollTop = historyEl.scrollHeight;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   2. RENDERIZAÇÃO DE RESULTADOS DA IA E MAPAS MENTAIS
+   -------------------------------------------------------------------------- */
+
+function abrirModalResultadoIA(titulo, textoMarkdown) {
+  let modal = document.getElementById('modal-ia-resultado');
+  
+  const formatarMarkdown = (md) => {
+    let mermaidBlocks = [];
+    let hasMermaid = false;
+    const userTheme = document.getElementById('ia-mindmap-theme') ? document.getElementById('ia-mindmap-theme').value : 'default';
+    
+    let tempMd = md.replace(/```mermaid([\s\S]*?)```/g, (match, code) => {
+       hasMermaid = true;
+       let cleanCode = `%%{init: {'theme': '${userTheme}'}}%%\n` + code.trim().replace(/&/g, 'e');
+       mermaidBlocks.push(cleanCode);
+       return `__COFRE_MERMAID_${mermaidBlocks.length - 1}__`;
+    });
+
+    let html = tempMd
+      .replace(/^### (.*$)/gim, '<h4 class="fw-bold mt-3">$1</h4>')
+      .replace(/^## (.*$)/gim, '<h3 class="fw-bold mt-4">$1</h3>')
+      .replace(/^# (.*$)/gim, '<h2 class="fw-bold mt-4">$1</h2>')
+      .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
+      .replace(/^\* (.*$)/gim, '<li>$1</li>');
+    
+    html = html.replace(/<\/li>\n<li>/gim, '</li><li>').replace(/\n/gim, '<br>');
+
+    if (hasMermaid) {
+       mermaidBlocks.forEach((code, index) => {
+          const container = `
+            <div class="mermaid-wrapper w-100 mt-3 mb-4 shadow-sm p-2" style="background: var(--bg-input); border-color: var(--border-color);">
+                <div class="d-flex justify-content-end mb-2 gap-2">
+                    <button class="btn btn-sm border" style="background: var(--bg-card); color: var(--text-main);" onclick="zoomMermaid(-0.3)"><i class="material-icons">zoom_out</i></button>
+                    <button class="btn btn-sm border" style="background: var(--bg-card); color: var(--text-main);" onclick="zoomMermaid(0.3)"><i class="material-icons">zoom_in</i></button>
+                    <button class="btn btn-sm btn-primary" onclick="baixarMapaMentalPng()"><i class="material-icons">download</i> Salvar PNG</button>
+                </div>
+                <div id="mermaid-pan-zoom" style="overflow: hidden; width: 100%; height: 400px; display: flex; align-items: center; justify-content: center; cursor: grab; position: relative;">
+                    <div class="mermaid" style="position: absolute; transform-origin: center;">${code}</div>
+                </div>
+            </div>`;
+          html = html.replace(`__COFRE_MERMAID_${index}__`, container);
+       });
+    }
+    return { html: html, hasMermaid: hasMermaid };
+  };
+
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'modal-ia-resultado';
+    modal.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15,23,42,0.8); z-index:10600; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(5px); padding:20px;';
+    document.body.appendChild(modal);
+  }
+
+  const formatedData = formatarMarkdown(textoMarkdown);
+
+  modal.innerHTML = `
+  <div style="background: var(--bg-card); color: var(--text-main); width:100%; max-width:900px; height:85vh; border-radius:var(--radius-lg); display:flex; flex-direction:column; overflow:hidden; box-shadow:var(--shadow-lg); border: 1px solid var(--border-color);">
+    <div class="d-flex justify-content-between align-items-center p-3 border-bottom" style="background: var(--bg-input);">
+      <h4 class="fw-bold m-0 d-flex align-items-center text-primary"><i class="material-icons me-2">auto_awesome</i> ${titulo}</h4>
+      <button class="btn btn-light rounded-circle p-1 d-flex align-items-center justify-content-center border-0" style="background: transparent; color: var(--text-main);" onclick="document.getElementById('modal-ia-resultado').style.display='none';"><i class="material-icons">close</i></button>
+    </div>
+    <div style="flex:1; overflow-y:auto; padding:30px; font-size:15px; line-height:1.6;">
+      ${formatedData.html}
+    </div>
+  </div>`;
+  
+  modal.style.display = 'flex';
+
+  if (formatedData.hasMermaid && typeof mermaid !== 'undefined') {
+     setTimeout(() => {
+         try {
+             mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' });
+             mermaid.init(undefined, document.querySelectorAll('.mermaid'));
+             if(typeof iniciarPanZoomMermaid === 'function') iniciarPanZoomMermaid();
+         } catch (e) { console.error("Erro no Mermaid:", e); }
+     }, 100);
+  }
+}
+
+window.currentMermaidScale = 1;
+window.zoomMermaid = function(step) {
+    window.currentMermaidScale += step;
+    if (window.currentMermaidScale < 0.3) window.currentMermaidScale = 0.3;
+    if (window.currentMermaidScale > 5.0) window.currentMermaidScale = 5.0; 
+    const mermaidDiv = document.querySelector('.mermaid');
+    if(mermaidDiv) mermaidDiv.style.transform = `scale(${window.currentMermaidScale})`;
+};
+
+window.baixarMapaMentalPng = function() {
+  if (typeof showToast === 'function') {
+      showToast("Para salvar o gráfico, clique com o botão direito sobre ele e selecione 'Guardar imagem como...'", "info");
+  }
+};
+
+/* --------------------------------------------------------------------------
+   3. QUIZ INTERATIVO E SIMULADOS
+   -------------------------------------------------------------------------- */
+window.quizDataAtual = null; 
+
+function abrirModalQuizInterativo(quizData) {
+    window.quizDataAtual = quizData;
+    let modal = document.getElementById('modal-ia-quiz');
+    
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'modal-ia-quiz';
+        modal.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15,23,42,0.9); z-index:10600; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(8px); padding:20px;';
+        document.body.appendChild(modal);
+    }
+
+    let html = `
+    <div style="background: var(--bg-body); width:100%; max-width:900px; height:90vh; border-radius:var(--radius-lg); box-shadow:var(--shadow-lg); display:flex; flex-direction:column; overflow:hidden; border: 1px solid var(--border-color);">
+        <div class="d-flex justify-content-between align-items-center p-4 border-bottom" style="background: var(--bg-card);">
+            <div>
+                <span class="badge bg-success mb-2 px-3 py-2 rounded-pill fw-bold">Modo Simulado</span>
+                <h3 class="fw-bold m-0" style="color: var(--text-main);">${quizData.titulo}</h3>
+            </div>
+            <button class="btn btn-light rounded-circle p-1 d-flex align-items-center justify-content-center border-0" style="background: transparent; color: var(--text-main);" onclick="document.getElementById('modal-ia-quiz').style.display='none';"><i class="material-icons">close</i></button>
+        </div>
+        <div id="quiz-container-scroll" style="flex:1; overflow-y:auto; padding:30px;">`;
+
+    quizData.questoes.forEach((q, qIndex) => {
+        html += `
+            <div class="quiz-card position-relative" id="q-card-${qIndex}">
+                <div class="quiz-question-text fw-bold mb-3" style="color: var(--text-main);"><span class="text-success me-2">Q${qIndex + 1}.</span> ${q.enunciado.replace(/\n/g, '<br>')}</div>
+                <div class="quiz-options-list">`;
+        
+        q.opcoes.forEach((op, oIndex) => {
+            html += `
+                <div class="quiz-option" id="opt-${qIndex}-${oIndex}" onclick="resolverQuestao(${qIndex}, ${oIndex}, ${q.indice_correto})">
+                    <div style="width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--border-color); display:flex; align-items:center; justify-content:center; flex-shrink:0;" class="opt-circle"></div>
+                    <div class="ms-2">${op}</div>
+                </div>`;
+        });
+
+        html += `
+                </div>
+                <div class="quiz-feedback shadow-sm mt-3" id="feedback-${qIndex}" style="display:none; padding:15px; border-radius:var(--radius-sm); border-left:4px solid var(--primary); background: var(--bg-active);">
+                    <div class="fw-bold mb-1" style="color: var(--text-main);">Gabarito Comentado:</div>
+                    <div class="small" style="line-height:1.6; color: var(--text-muted);">${q.explicacao}</div>
+                </div>
+            </div>`;
+    });
+
+    html += `
+        </div>
+        <div class="p-3 border-top d-flex justify-content-between align-items-center" style="background: var(--bg-card);">
+            <span class="text-muted small fw-bold ms-2">${quizData.questoes.length} Questões Analisadas</span>
+        </div>
+    </div>`;
+    
+    modal.innerHTML = html;
+    modal.style.display = 'flex';
+}
+
+window.resolverQuestao = function(qIndex, clicadaIndex, corretaIndex) {
+    const card = document.getElementById(`q-card-${qIndex}`);
+    if (card.classList.contains('respondida')) return; 
+    card.classList.add('respondida');
+
+    document.getElementById(`feedback-${qIndex}`).style.display = 'block';
+
+    const opcoes = card.querySelectorAll('.quiz-option');
+    opcoes.forEach((op, index) => {
+        const circulo = op.querySelector('.opt-circle');
+        if (index === corretaIndex) {
+            op.classList.add('show-correct');
+            circulo.innerHTML = '<i class="material-icons" style="font-size:16px; color:var(--success);">check</i>';
+            circulo.style.borderColor = 'var(--success)';
+        } else if (index === clicadaIndex && clicadaIndex !== corretaIndex) {
+            op.classList.add('selected-wrong');
+            circulo.innerHTML = '<i class="material-icons" style="font-size:16px; color:var(--danger);">close</i>';
+            circulo.style.borderColor = 'var(--danger)';
+        }
+    });
+};
+
+/* --------------------------------------------------------------------------
+   4. LEITOR IMERSIVO (Objeto TTS e UX)
+   -------------------------------------------------------------------------- */
+
+window.LeitorTTS = {
+  synth: window.speechSynthesis,
+  utterance: null,
+  isPaused: false,
+  
+  ler: function(texto, btnElement) {
+    if (this.synth.speaking) {
+      if (this.isPaused) {
+        this.synth.resume();
+        this.isPaused = false;
+        if(btnElement) btnElement.innerHTML = '<i class="material-icons fs-4">pause</i>';
+      } else {
+        this.synth.pause();
+        this.isPaused = true;
+        if(btnElement) btnElement.innerHTML = '<i class="material-icons fs-4">play_arrow</i>';
+      }
+      return;
+    }
+
+    let textoLimpo = texto.replace(/<[^>]*>?/gm, '').replace(/[*#_]/g, '');
+    this.utterance = new SpeechSynthesisUtterance(textoLimpo);
+    this.utterance.rate = 1.05; 
+    
+    let vozes = this.synth.getVoices();
+    let vozPremium = 
+        vozes.find(v => v.name.includes('Google português do Brasil')) || 
+        vozes.find(v => v.name.includes('Online (Natural)') || v.name.includes('Francisca')) || 
+        vozes.find(v => v.lang === 'pt-BR' && v.name.includes('Online')) || 
+        vozes.find(v => v.lang === 'pt-BR'); 
+        
+    if (vozPremium) this.utterance.voice = vozPremium;
+    else this.utterance.lang = 'pt-BR'; 
+
+    if (btnElement && !btnElement.dataset.htmlOriginal) {
+        btnElement.dataset.htmlOriginal = btnElement.innerHTML;
+    }
+
+    this.utterance.onend = () => {
+      this.isPaused = false;
+      if(btnElement && btnElement.dataset.htmlOriginal) {
+          btnElement.innerHTML = btnElement.dataset.htmlOriginal;
+      }
+    };
+
+    if(btnElement) {
+        btnElement.innerHTML = '<i class="material-icons fs-4">pause</i>';
+    }
+    this.synth.speak(this.utterance);
+  },
+
+  parar: function() {
+    this.synth.cancel();
+    this.isPaused = false;
+  }
+};
+
+document.addEventListener('keydown', (e) => { 
+    if (e.key === 'Escape' && window.LeitorTTS) window.LeitorTTS.parar(); 
+});
+
+if (speechSynthesis.onvoiceschanged !== undefined) {
+    speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+}
+
+async function executarLeituraFerramenta() {
+    if (typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal("A extrair e preparar texto do material...");
+    
+    try {
+        const textoExtraido = await extrairTextoDasPaginasSelecionadas(); 
+        let textoLimpo = textoExtraido.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+        
+        let modal = document.getElementById('modal-leitor-imersivo');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'modal-leitor-imersivo';
+            // Transparência adaptável via CSS Variables
+            modal.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; display:flex; flex-direction:column; background: var(--bg-body); z-index: 10700; opacity: 0.98;';
+            document.body.appendChild(modal);
+        }
+
+        modal.innerHTML = `
+        <div class="w-100 border-bottom shadow-sm d-flex align-items-center justify-content-between px-4 py-3" style="background: var(--bg-card);">
+            <div class="d-flex align-items-center gap-3">
+                <button id="btn-tts-play" class="btn btn-success rounded-circle shadow-sm d-flex align-items-center justify-content-center" style="width: 50px; height: 50px;" onclick="window.LeitorTTS.ler('${escapeHtml(textoLimpo)}', this)">
+                    <i class="material-icons fs-4">play_arrow</i>
+                </button>
+                <button class="btn rounded-circle d-flex align-items-center justify-content-center border" style="width: 40px; height: 40px; color: var(--danger); background: var(--bg-input); border-color: var(--border-color) !important;" onclick="window.LeitorTTS.parar()" title="Parar Áudio">
+                    <i class="material-icons fs-5">stop</i>
+                </button>
+                <span class="ms-3 fw-bold" style="color: var(--text-main);">Estúdio de Escuta</span>
+            </div>
+            <button class="btn btn-light rounded-circle p-2 d-flex align-items-center justify-content-center border-0" style="background: transparent; color: var(--text-main);" onclick="document.getElementById('modal-leitor-imersivo').style.display='none'; window.LeitorTTS.parar();"><i class="material-icons">close</i></button>
+        </div>
+        <div class="flex-grow-1 overflow-auto d-flex justify-content-center p-5 pb-5">
+            <div style="max-width: 800px; font-size: 1.5rem; line-height: 2.2; color: var(--text-main); font-family: 'Inter', sans-serif;">
+                ${escapeHtml(textoLimpo)}
+            </div>
+        </div>`;
+
+        if (typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
+        modal.style.display = 'flex';
+        
+    } catch (error) {
+        if (typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
+        if (typeof showToast === 'function') showToast(error.message, "error");
+    }
+}
+</script>
