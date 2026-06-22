@@ -1,46 +1,120 @@
 <script>
 /* ==========================================================================
-   MÓDULO 16: MOTOR DE GAMIFICAÇÃO, AGENDA E JORNADAS (js_gamificacao.html)
+   MÓDULO 16: MOTOR DE GAMIFICAÇÃO, AGENDA E JORNADAS
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
-   VARIÁVEIS GLOBAIS
+   VARIÁVEIS GLOBAIS E REGRAS DINÂMICAS
    -------------------------------------------------------------------------- */
 let globalXP = 0;
 let globalLevel = 1;
 const XP_POR_NIVEL = 100;
-let minhasJornadas = []; // Guarda os dados reais vindos da Base de Dados
+let minhasJornadas = []; 
+
+let jAtiva = null;
+let jornadaAtivaEditando = null; 
+
+let RegrasMoogIA = { niveis: [], acoes: [], conquistas: [] };
 
 /* --------------------------------------------------------------------------
    INICIALIZAÇÃO (BOOT DO MÓDULO)
    -------------------------------------------------------------------------- */
 document.addEventListener('DOMContentLoaded', () => {
     const email = localStorage.getItem('usuario_email');
+    
+    google.script.run.withSuccessHandler((resp) => {
+        if(resp.success) {
+            RegrasMoogIA = resp.regras;
+            SafeStorage.setItem('moogia_rules', JSON.stringify(resp.regras));
+        }
+    }).carregarRegrasGamificacaoBD();
+
     if (!email) {
-        // Sem email logado, renderiza apenas o estado vazio após um breve delay
         setTimeout(renderizarGridJornadas, 1500);
         return;
     }
 
-    // 1. Vai buscar os XP reais ao servidor ao entrar
     google.script.run.withSuccessHandler((resp) => {
         if (resp.success) {
             globalXP = resp.xp;
             globalLevel = resp.level;
             atualizarBarrasXP();
+            
+            // NOVA CHAMADA: Calcula e exibe o streak assim que o utilizador entra
+            window.atualizarSequenciaDashboard();
         }
     }).carregarGamificacao(email);
 
-    // 2. Dá tempo ao sistema para carregar o resto e busca as Jornadas na BD
     setTimeout(carregarJornadasAtivas, 1500); 
 });
 
 /* --------------------------------------------------------------------------
-   LÓGICA DE GAMIFICAÇÃO (VAQUINHA E XP)
+   LÓGICA DE GAMIFICAÇÃO DINÂMICA
    -------------------------------------------------------------------------- */
+window.dispararAcaoGamificacao = function(gatilhoAcao, eventClick = null) {
+    // NOVA CHAMADA: Grava a atividade fisicamente na tabela de logs da Nuvem
+    const emailUsuario = localStorage.getItem('usuario_email');
+    if (emailUsuario) {
+        google.script.run.withSuccessHandler(() => {
+            // Atualiza o painel de streak de forma assíncrona logo após registar a ação
+            if (typeof window.atualizarSequenciaDashboard === 'function') window.atualizarSequenciaDashboard();
+        }).registrarLogAcaoBD(emailUsuario, gatilhoAcao);
+    }
+
+    if (!RegrasMoogIA.acoes || RegrasMoogIA.acoes.length === 0) return;
+
+    const regraAcao = RegrasMoogIA.acoes.find(a => a.gatilho === gatilhoAcao);
+    if (!regraAcao) return; 
+
+    let stats = JSON.parse(SafeStorage.getItem('moogia_stats') || '{}');
+    let dataHoje = new Date().toISOString().split('T')[0];
+    
+    if (stats.data !== dataHoje) {
+        stats = { data: dataHoje, contadores: {} }; 
+    }
+    
+    stats.contadores[gatilhoAcao] = (stats.contadores[gatilhoAcao] || 0) + 1;
+    let xpGanhoNestaAcao = regraAcao.pr;
+    let pontosGanhosHoje = stats.contadores[gatilhoAcao] * regraAcao.pr;
+
+    if (regraAcao.limite > 0 && pontosGanhosHoje > regraAcao.limite) {
+        xpGanhoNestaAcao = 0;
+    }
+
+    SafeStorage.setItem('moogia_stats', JSON.stringify(stats));
+
+    RegrasMoogIA.conquistas.forEach(conq => {
+        if (conq.alvo === gatilhoAcao && stats.contadores[gatilhoAcao] === conq.meta) {
+            let unlockedBadges = JSON.parse(SafeStorage.getItem('moogia_badges') || '[]');
+            if (!unlockedBadges.includes(conq.id)) {
+                unlockedBadges.push(conq.id);
+                SafeStorage.setItem('moogia_badges', JSON.stringify(unlockedBadges));
+                
+                if (typeof showToast === 'function') {
+                    showToast("🏆 CONQUISTA DESBLOQUEADA: " + conq.nome + "! +" + conq.bonus + " PR!", "warning");
+                }
+                ganharXP(conq.bonus, eventClick);
+            }
+        }
+    });
+
+    if (xpGanhoNestaAcao > 0) {
+        ganharXP(xpGanhoNestaAcao, eventClick);
+    }
+};
+
 function ganharXP(pontosGanhos, eventClick = null) {
     globalXP += pontosGanhos;
     let subiuNivel = false;
+
+    const horaAtual = new Date().getHours();
+    if (horaAtual >= 1 && horaAtual <= 4) {
+        if (!localStorage.getItem('badge_corujinha')) {
+            localStorage.setItem('badge_corujinha', 'true');
+            if (typeof showToast === 'function') showToast("🏆 Conquista: Vaca Corujinha! Ganhaste +50 PR bónus por estudares de madrugada!", "warning");
+            globalXP += 50; 
+        }
+    }
 
     while (globalXP >= (globalLevel * XP_POR_NIVEL)) {
         globalXP -= (globalLevel * XP_POR_NIVEL);
@@ -50,59 +124,73 @@ function ganharXP(pontosGanhos, eventClick = null) {
 
     atualizarBarrasXP();
     
-    // Sincroniza com o servidor
     const email = localStorage.getItem('usuario_email');
     if (email) {
         google.script.run.sincronizarGamificacao(email, globalXP, globalLevel);
     }
     
     if (subiuNivel) {
-        if (typeof showToast === 'function') showToast(`🎉 LEVEL UP! Subiste para o Nível ${globalLevel}!`, "success");
+        if (typeof showToast === 'function') showToast("🎉 LEVEL UP! Subiste para o Nível " + globalLevel + "!", "success");
         animarVaquinhaLevelUp();
     }
     
-    if (eventClick) {
+    if (eventClick && pontosGanhos > 0) {
         criarPopupXP(eventClick.clientX, eventClick.clientY, pontosGanhos);
     }
 }
 
-// Atualiza o DOM com os valores corretos
 function atualizarBarrasXP() {
     const maxXpAtual = globalLevel * XP_POR_NIVEL;
     const percentagem = Math.min((globalXP / maxXpAtual) * 100, 100);
 
-    // Atualiza o Header
     const headerText = document.getElementById('global-xp-text');
     const headerBar = document.getElementById('global-xp-bar');
     const headerLevel = document.getElementById('global-level-text');
-    
-    if(headerText) headerText.innerText = `${globalXP} / ${maxXpAtual} XP`;
-    if(headerBar) headerBar.style.width = `${percentagem}%`;
-    if(headerLevel) headerLevel.innerText = globalLevel;
-
-    // Atualiza a View da Agenda
     const painelLevel = document.getElementById('painel-level');
     const painelBar = document.getElementById('painel-xp-bar');
     const painelRank = document.getElementById('painel-rank');
-
-    if(painelLevel) painelLevel.innerText = globalLevel;
-    if(painelBar) painelBar.style.width = `${percentagem}%`;
     
-    // Ranks Baseados no Nível
-    if(painelRank) {
-        if(globalLevel < 5) painelRank.innerText = "Vaquinha Estudante 🎒";
-        else if(globalLevel < 10) painelRank.innerText = "Vaquinha Focada 👓";
-        else painelRank.innerText = "Vaquinha Mestre 🎓";
+    if(headerText) headerText.innerText = globalXP + " / " + maxXpAtual + " PR";
+    if(headerBar) headerBar.style.width = percentagem + "%";
+    if(headerLevel) headerLevel.innerText = globalLevel;
+    if(painelLevel) painelLevel.innerText = globalLevel;
+    if(painelBar) painelBar.style.width = percentagem + "%";
+    
+    let patenteAtual = "Estudante Novato";
+    let imagemAtual = "https://i.ibb.co/5WHfDf0R/vaquinha.png"; 
+    
+    if (RegrasMoogIA.niveis && RegrasMoogIA.niveis.length > 0) {
+        let nivelEncontrado = RegrasMoogIA.niveis.find(n => globalLevel <= n.teto);
+        if (!nivelEncontrado) nivelEncontrado = RegrasMoogIA.niveis[RegrasMoogIA.niveis.length - 1];
+        patenteAtual = nivelEncontrado.titulo;
+        imagemAtual = nivelEncontrado.imagem;
+    } else {
+        if (globalLevel <= 5) patenteAtual = "Bezerro Desmamado";
+        else if (globalLevel <= 10) patenteAtual = "Vaquinha de Presépio";
+        else patenteAtual = "Vaquinha Mestre";
+    }
+
+    if(painelRank) painelRank.innerText = patenteAtual;
+
+    const imgHeader = document.getElementById('vaquinha-avatar-header');
+    const imgBig = document.getElementById('vaquinha-big-avatar');
+    
+    if (imgHeader && imgHeader.src !== imagemAtual) imgHeader.src = imagemAtual;
+    if (imgBig && imgBig.src !== imagemAtual) {
+        imgBig.style.opacity = 0;
+        setTimeout(() => {
+            imgBig.src = imagemAtual;
+            imgBig.style.opacity = 1;
+        }, 200);
     }
 }
 
-// Efeito de números subindo no cursor do mouse
 function criarPopupXP(x, y, pontos) {
     const pop = document.createElement('div');
     pop.className = 'xp-popup';
-    pop.innerText = `+${pontos} XP`;
-    pop.style.left = `${x}px`;
-    pop.style.top = `${y}px`;
+    pop.innerText = "+" + pontos + " PR";
+    pop.style.left = x + "px";
+    pop.style.top = y + "px";
     document.body.appendChild(pop);
     setTimeout(() => pop.remove(), 1500);
 }
@@ -124,36 +212,21 @@ function abrirModalVincularJornada() {
         if (typeof showToast === 'function') showToast("A Mesa de Estudos está vazia. Adicione material primeiro.", "warning");
         return;
     }
-
     const select = document.getElementById('select-materia-vincular');
     if (select) {
         select.innerHTML = '';
-        materiasAtivasMock.forEach(m => {
-            select.innerHTML += `<option value="${m}">${m}</option>`;
-        });
+        materiasAtivasMock.forEach(m => { select.innerHTML += '<option value="' + m + '">' + m + '</option>'; });
     }
-
     const modalEl = document.getElementById('modalVincularJornada');
-    if (modalEl) {
-        const bsModal = new bootstrap.Modal(modalEl);
-        bsModal.show();
-    }
+    if (modalEl) new bootstrap.Modal(modalEl).show();
 }
 
 function confirmarVinculoJornada(event) {
     const select = document.getElementById('select-materia-vincular');
     const materia = select ? select.value : 'Geral';
-    
-    // Aqui no futuro enviaria o pdfState para o Backend
-    
     const modalEl = document.getElementById('modalVincularJornada');
-    if (modalEl) {
-        try { bootstrap.Modal.getInstance(modalEl).hide(); } catch(e) {}
-    }
-
-    if (typeof showToast === 'function') showToast(`Materiais arquivados no Cofre de '${materia}'.`, "success");
-    
-    // Recompensa o aluno por se organizar!
+    if (modalEl) { try { bootstrap.Modal.getInstance(modalEl).hide(); } catch(e) {} }
+    if (typeof showToast === 'function') showToast("Materiais arquivados no Cofre de " + materia + ".", "success");
     ganharXP(15, event || { clientX: window.innerWidth/2, clientY: window.innerHeight/2 });
 }
 
@@ -163,149 +236,538 @@ function confirmarVinculoJornada(event) {
 function gerarTarefasDaAgendaMock() {
     const container = document.getElementById('agenda-tasks-container');
     if(!container) return;
-
-    // Simulação do resultado do cruzamento: JSON da IA vs Data da Prova
     const tarefas = [
         { id: 'task-1', tempo: '2h', materia: 'Engenharia de Software', topico: 'Padrões de Projeto (MVC, Singleton)', xp: 50 },
         { id: 'task-2', tempo: '1h', materia: 'Banco de Dados', topico: 'Revisão: Normalização (1FN a 3FN)', xp: 30 },
         { id: 'task-3', tempo: '30m', materia: 'Simulado IA', topico: 'Fazer 15 questões de Segurança', xp: 20 }
     ];
-
-    container.innerHTML = tarefas.map(t => `
-        <div class="card border border-primary-subtle shadow-sm rounded-4 p-3 d-flex flex-row align-items-center justify-content-between mb-3 bg-white" id="${t.id}">
-            <div class="d-flex align-items-center gap-3">
-               <div class="bg-primary-subtle text-primary rounded-circle d-flex align-items-center justify-content-center fw-bold border border-primary" style="width: 50px; height: 50px;">
-                 ${t.tempo}
-               </div>
-               <div>
-                 <h5 class="fw-bold mb-1 text-dark">${t.materia}</h5>
-                 <span class="text-muted small"><i class="material-icons align-middle text-secondary" style="font-size: 14px;">flag</i> Tópico: ${t.topico}</span>
-               </div>
-            </div>
-            <button class="btn btn-success rounded-pill px-4 fw-bold shadow-sm d-flex align-items-center gap-1" onclick="concluirTarefaAgenda('${t.id}', ${t.xp}, event)">
-               <i class="material-icons fs-6">check_circle</i> Concluir
-            </button>
-        </div>
-    `).join('');
+    let html = "";
+    tarefas.forEach(t => {
+        html += '<div class="card border border-primary-subtle shadow-sm rounded-4 p-3 d-flex flex-row align-items-center justify-content-between mb-3 bg-white" id="' + t.id + '">';
+        html += '<div class="d-flex align-items-center gap-3">';
+        html += '<div class="bg-primary-subtle text-primary rounded-circle d-flex align-items-center justify-content-center fw-bold border border-primary" style="width: 50px; height: 50px;">' + t.tempo + '</div>';
+        html += '<div><h5 class="fw-bold mb-1 text-dark">' + t.materia + '</h5><span class="text-muted small"><i class="material-icons align-middle text-secondary" style="font-size: 14px;">flag</i> Tópico: ' + t.topico + '</span></div>';
+        html += '</div>';
+        html += '<button class="btn btn-success rounded-pill px-4 fw-bold shadow-sm d-flex align-items-center gap-1" onclick="concluirTarefaAgenda(\'' + t.id + '\', ' + t.xp + ', event)"><i class="material-icons fs-6">check_circle</i> Concluir</button>';
+        html += '</div>';
+    });
+    container.innerHTML = html;
 }
 
 window.concluirTarefaAgenda = function(taskId, xpReward, event) {
     const taskCard = document.getElementById(taskId);
-    if (!taskCard || taskCard.classList.contains('task-card-done')) return; // Já foi concluída
-
-    // Altera o visual do Card
+    if (!taskCard || taskCard.classList.contains('task-card-done')) return; 
     taskCard.classList.add('task-card-done');
+    
     const btn = taskCard.querySelector('button');
     if (btn) {
         btn.disabled = true;
         btn.classList.replace('btn-success', 'btn-outline-success');
         btn.innerHTML = '<i class="material-icons fs-6">done_all</i> Feito!';
     }
-
-    // Dispara o motor de Gamificação
-    ganharXP(xpReward, event);
+    
+    // NOVA CHAMADA: Substitui ou acompanha o ganharXP antigo para registar o log na nuvem
+    if (typeof dispararAcaoGamificacao === 'function') {
+        dispararAcaoGamificacao('concluir_tarefa_agenda', event);
+    }
 };
 
 /* --------------------------------------------------------------------------
    MOTOR DE JORNADAS (VISUALIZAÇÃO, CRIAÇÃO MANUAL E GESTÃO)
    -------------------------------------------------------------------------- */
-
-// 1. CARREGAR JORNADAS DO BACKEND (Silencioso e à prova de falhas)
 function carregarJornadasAtivas() {
     const email = localStorage.getItem('usuario_email');
-    
-    // Se não há email, tira logo o spinner e mostra o vazio
-    if(!email) {
-        renderizarGridJornadas(); 
-        return;
-    }
+    if(!email) { renderizarGridJornadas(); return; }
     
     const grid = document.getElementById('grid-jornadas-ativas');
     if (grid && (!minhasJornadas || minhasJornadas.length === 0)) {
-        grid.innerHTML = `
-           <div class="col-12 text-center py-5 text-muted border rounded-4 bg-white shadow-sm" style="border-style: dashed !important;">
-             <div class="spinner-border text-primary spinner-border-sm mb-2" role="status"></div>
-             <p class="mb-0 small">A sincronizar com a base de dados...</p>
-           </div>`;
+        grid.innerHTML = '<div class="col-12 text-center py-5 text-muted border rounded-4 bg-white shadow-sm" style="border-style: dashed !important;"><div class="spinner-border text-primary spinner-border-sm mb-2" role="status"></div><p class="mb-0 small">A sincronizar com a base de dados...</p></div>';
     }
-
     google.script.run
         .withSuccessHandler(resp => {
-            if(resp.success && resp.jornadas) {
-                minhasJornadas = resp.jornadas.map(j => ({ id: j.id, dataCriacao: j.dataCriacao, ...j.dados }));
-            } else {
-                // Em caso de falha no backend, garante que a lista fica vazia (sem mostrar erros no ecrã)
-                minhasJornadas = []; 
-            }
-            // Chama a renderização SEMPRE, para matar o spinner
+            if(resp.success && resp.jornadas) minhasJornadas = resp.jornadas.map(j => ({ id: j.id, dataCriacao: j.dataCriacao, ...j.dados }));
+            else minhasJornadas = []; 
             renderizarGridJornadas(); 
         })
         .withFailureHandler(err => {
-            console.warn("Ligação à BD falhou. A mostrar estado vazio.", err);
-            minhasJornadas = [];
-            // Chama a renderização SEMPRE, para matar o spinner
-            renderizarGridJornadas(); 
+            console.warn("Ligação à BD falhou.");
+            minhasJornadas = []; renderizarGridJornadas(); 
         })
         .carregarJornadasBD(email);
 }
 
-// 2. DESENHAR A GRELHA DE JORNADAS
 function renderizarGridJornadas() {
     const grid = document.getElementById('grid-jornadas-ativas');
     if(!grid) return;
     
     if(!minhasJornadas || minhasJornadas.length === 0) {
-        grid.innerHTML = `
-          <div class="col-12 text-center py-5 text-muted border rounded-4 bg-white shadow-sm" style="border-style: dashed !important;">
-             <i class="material-icons mb-3" style="font-size: 48px; opacity: 0.3;">route</i>
-             <h5 class="fw-bold">Nenhuma jornada ativa.</h5>
-             <p class="mb-0 small">Clique em "Criar Manualmente" ou "Ler Edital com IA" para iniciar a sua organização.</p>
-          </div>`;
+        grid.innerHTML = '<div class="col-12 text-center py-5 text-muted border rounded-4 bg-white shadow-sm" style="border-style: dashed !important;"><i class="material-icons mb-3" style="font-size: 48px; opacity: 0.3;">route</i><h5 class="fw-bold">Nenhuma jornada ativa.</h5><p class="mb-0 small">Clique em Criar Manualmente para iniciar a sua organização.</p></div>';
         return;
     }
     
-    grid.innerHTML = minhasJornadas.map(j => {
+    let htmlFinal = "";
+    minhasJornadas.forEach(j => {
         const numMaterias = j.materias ? j.materias.length : 0;
         const totalMateriais = j.materias ? j.materias.reduce((acc, mat) => acc + (mat.materiais ? mat.materiais.length : 0), 0) : 0;
-        
         let statusRoteiro = j.temRoteiro 
-            ? `<span class="text-success small fw-bold"><i class="material-icons align-middle" style="font-size: 14px;">check_circle</i> Roteiro Ativo</span>`
-            : `<span class="text-warning small fw-bold"><i class="material-icons align-middle" style="font-size: 14px;">pending_actions</i> Sem Roteiro</span>`;
+            ? '<span class="text-success small fw-bold"><i class="material-icons align-middle" style="font-size: 14px;">check_circle</i> Roteiro Ativo</span>'
+            : '<span class="text-warning small fw-bold"><i class="material-icons align-middle" style="font-size: 14px;">pending_actions</i> Sem Roteiro</span>';
 
-        return `
-        <div class="col-md-6 col-lg-4">
-          <div class="card border-0 shadow-sm rounded-4 p-4 h-100 bg-white transition-hover">
-            <div class="d-flex justify-content-between align-items-start mb-3">
-              <span class="badge bg-primary-subtle text-primary rounded-pill fw-bold">${escapeHtml(j.tipo || 'Geral')}</span>
-              <button class="btn btn-sm btn-light rounded-circle text-muted p-1"><i class="material-icons">more_vert</i></button>
-            </div>
-            <h5 class="fw-bold text-dark mb-2" style="line-height: 1.3;">${escapeHtml(j.titulo || 'Nova Jornada')}</h5>
-            
-            <div class="d-flex flex-wrap gap-3 mt-3 text-muted small">
-              <span title="Matérias Mapeadas"><i class="material-icons align-middle" style="font-size: 16px;">category</i> ${numMaterias}</span>
-              <span title="Materiais no Cofre"><i class="material-icons align-middle" style="font-size: 16px;">folder_zip</i> ${totalMateriais} docs</span>
-            </div>
-            
-            <hr class="opacity-25 my-3">
-            
-            <div class="d-flex justify-content-between align-items-center mt-auto">
-              ${statusRoteiro}
-              <button class="btn btn-outline-dark btn-sm rounded-pill px-3 fw-bold" onclick="abrirGerenciadorJornada('${j.id}')">Gerir Cofre</button>
-            </div>
-          </div>
-        </div>`;
-    }).join('');
+        let safeId = escapeHtml(j.id);
+        let safeTitulo = escapeHtml(j.titulo || 'Nova Jornada');
+        let safeTipo = escapeHtml(j.tipo || 'Geral');
+
+        let card = '<div class="col-md-6 col-lg-4"><div class="card border-0 shadow-sm rounded-4 p-4 h-100 bg-white transition-hover">';
+        card += '<div class="d-flex justify-content-between align-items-start mb-3"><span class="badge bg-primary-subtle text-primary rounded-pill fw-bold">' + safeTipo + '</span>';
+        card += '<div class="dropdown"><button class="btn btn-sm btn-light rounded-circle text-muted p-1" data-bs-toggle="dropdown" aria-expanded="false"><i class="material-icons" style="font-size:18px; vertical-align:middle;">more_vert</i></button>';
+        card += '<ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3 p-1"><li><a class="dropdown-item d-flex align-items-center gap-2 small py-2 rounded-2" href="#" onclick="executarRenomearJornada(\'' + safeId + '\', \'' + safeTitulo + '\')"><i class="material-icons text-primary" style="font-size:16px;">edit</i> Renomear Jornada</a></li>';
+        card += '<li><hr class="dropdown-divider opacity-25"></li><li><a class="dropdown-item d-flex align-items-center gap-2 small text-danger py-2 rounded-2" href="#" onclick="executarExcluirJornada(\'' + safeId + '\', \'' + safeTitulo + '\')"><i class="material-icons text-danger" style="font-size:16px;">delete</i> Arquivar/Excluir</a></li></ul></div></div>';
+        card += '<h5 class="fw-bold text-dark mb-2" style="line-height: 1.3;">' + safeTitulo + '</h5>';
+        card += '<div class="d-flex flex-wrap gap-3 mt-3 text-muted small"><span title="Matérias Mapeadas"><i class="material-icons align-middle" style="font-size: 16px;">category</i> ' + numMaterias + ' áreas</span><span title="Materiais no Cofre"><i class="material-icons align-middle" style="font-size: 16px;">folder_zip</i> ' + totalMateriais + ' docs</span></div>';
+        card += '<hr class="opacity-25 my-3"><div class="d-flex justify-content-between align-items-center mt-auto">' + statusRoteiro + '<button class="btn btn-primary btn-sm rounded-pill px-4 fw-bold shadow-sm" onclick="abrirGerenciadorJornada(\'' + safeId + '\')">Acessar Jornada</button></div></div></div>';
+        
+        htmlFinal += card;
+    });
+    grid.innerHTML = htmlFinal;
 }
 
-// 3. AÇÕES DE CRIAÇÃO MANUAL E GESTÃO
+// ==========================================================================
+// RENDERIZADOR REMOTO E INTEGRADO DO CELEIRO DE MATERIAIS REAL
+// ==========================================================================
+window.abrirGerenciadorJornada = function(id) {
+    const jornada = minhasJornadas.find(j => j.id === id);
+    if(!jornada) return;
+    jAtiva = jnodeClone(jornada); 
+    jornadaAtivaEditando = jAtiva;
+
+    document.getElementById('painel-jor-nome').innerText = jAtiva.titulo || 'Jornada';
+    document.getElementById('painel-jor-tipo').innerText = jAtiva.tipo || 'Geral';
+
+    const seletorMateria = document.getElementById('jor-material-materia-seletor');
+    if(seletorMateria) {
+        let optHtml = "";
+        (jAtiva.materias || []).forEach((m, i) => { 
+            // CORTADOR DE TEXTO PARA O SELECT DA DISCIPLINA
+            let nomeCortado = m.nome.length > 50 ? escapeHtml(m.nome.substring(0, 50)) + '...' : escapeHtml(m.nome);
+            optHtml += '<option value="' + i + '" title="' + escapeHtml(m.nome) + '">' + nomeCortado + '</option>'; 
+        });
+        seletorMateria.innerHTML = optHtml;
+        atualizarSeletorTopicosMateriais();
+    }
+
+    renderizarMateriaisDoCeleiro();
+    renderizarArvoreDisciplinas();
+
+    const modalEl = document.getElementById('modalPainelJornada');
+    if(modalEl) new bootstrap.Modal(modalEl).show();
+};
+
+window.atualizarSeletorTopicosMateriais = function() {
+    const seletorMateria = document.getElementById('jor-material-materia-seletor');
+    const containerTopicos = document.getElementById('jor-material-topicos-container');
+    if(!seletorMateria || !containerTopicos) return;
+
+    const idx = seletorMateria.value;
+    if(idx === "" || !jAtiva.materias[idx]) {
+        containerTopicos.innerHTML = '<small class="text-muted p-2 d-block">Nenhuma disciplina cadastrada.</small>';
+        return;
+    }
+
+    const materia = jAtiva.materias[idx];
+    if(!materia.topicos || materia.topicos.length === 0) {
+        containerTopicos.innerHTML = '<small class="text-muted p-2 d-block">Esta disciplina não possui tópicos mapeados.</small>';
+        return;
+    }
+
+    let topHTML = "";
+    materia.topicos.forEach((t, i) => {
+        // CORTADOR DE TEXTO PARA AS CHECKBOXES
+        let labelCortada = t.length > 55 ? escapeHtml(t.substring(0, 55)) + '...' : escapeHtml(t);
+        topHTML += '<div class="form-check small mb-1"><input class="form-check-input jor-topic-check" type="checkbox" value="' + escapeHtml(t) + '" id="chk-topico-' + i + '"><label class="form-check-label text-dark d-inline-block text-truncate" style="max-width: 90%; vertical-align: middle;" title="' + escapeHtml(t) + '" for="chk-topico-' + i + '">' + labelCortada + '</label></div>';
+    });
+    containerTopicos.innerHTML = topHTML;
+};
+
+function renderizarMateriaisDoCeleiro() {
+    const listaHtml = document.getElementById('jor-lista-materiais-cofre');
+    const badgeTotal = document.getElementById('jor-badge-total-materiais');
+    if(!listaHtml) return;
+
+    let totalItens = 0;
+    let poolCards = "";
+
+    (jAtiva.materias || []).forEach((m, mIdx) => {
+        if(m.materiais && m.materiais.length > 0) {
+            m.materiais.forEach((mat, matIdx) => {
+                totalItens++;
+                let icon = "insert_drive_file";
+                let iconClass = "bg-secondary text-white";
+                if(mat.tipo === 'pdf') { icon = "picture_as_pdf"; iconClass = "bg-danger-subtle text-danger"; }
+                else if(mat.tipo === 'image') { icon = "image"; iconClass = "bg-success-subtle text-success"; }
+                else if(mat.tipo === 'link') { icon = "play_arrow"; iconClass = "bg-danger text-white"; }
+                else if(mat.tipo === 'docx') { icon = "description"; iconClass = "bg-primary-subtle text-primary"; }
+
+                let badgesTopicos = "";
+                (mat.topicos || []).forEach(t => { 
+                    // CORTADOR DE TEXTO PARA AS TAGS/BADGES DA BIBLIOTECA
+                    let badgeText = t.length > 35 ? escapeHtml(t.substring(0, 35)) + '...' : escapeHtml(t);
+                    badgesTopicos += '<span class="badge bg-light text-secondary border text-truncate d-inline-block align-middle" style="max-width: 220px; font-size:10px; margin-bottom:2px;" title="' + escapeHtml(t) + '">' + badgeText + '</span> '; 
+                });
+
+                let itemHtml = '<div class="list-group-item border border-light shadow-sm bg-transparent px-3 py-3 d-flex flex-column gap-2 mb-2 rounded-3 bg-white transition-hover">';
+                itemHtml += '<div class="d-flex justify-content-between align-items-start"><div class="d-flex gap-3 align-items-center" style="max-width: 75%;">';
+                itemHtml += '<div class="rounded-3 d-flex align-items-center justify-content-center p-2 ' + iconClass + '"><i class="material-icons">' + icon + '</i></div>';
+                itemHtml += '<div class="overflow-hidden"><h6 class="mb-0 fw-bold text-dark text-truncate" title="' + escapeHtml(mat.nome) + '">' + escapeHtml(mat.nome) + '</h6>';
+                itemHtml += '<small class="text-muted d-flex align-items-center gap-1" style="font-size:11px;"><i class="material-icons" style="font-size: 12px;">event</i> Indexado em: ' + (mat.data || 'Recente') + '</small></div></div>';
+                itemHtml += '<div class="d-flex gap-1"><button class="btn btn-primary btn-sm rounded-pill px-3 fw-bold shadow-sm d-flex align-items-center gap-1" onclick="levarMaterialParaMesa(\'' + escapeHtml(mat.url) + '\', \'' + escapeHtml(mat.nome) + '\', \'' + mat.tipo + '\')"><i class="material-icons fs-6">build_circle</i> Estudar</button>';
+                itemHtml += '<button class="btn btn-sm btn-light border text-danger p-1 rounded-circle" onclick="executarExcluirMaterialCeleiro(' + mIdx + ', ' + matIdx + ')" title="Excluir Material"><i class="material-icons fs-6">delete</i></button></div></div>';
+                itemHtml += '<div class="d-flex flex-wrap align-items-center gap-1 mt-1 border-top pt-2"><span class="badge bg-primary-subtle text-primary border text-truncate d-inline-block align-middle" style="max-width: 150px; font-size:10px; margin-bottom:2px;" title="Módulo: ' + escapeHtml(m.nome) + '">Módulo: ' + escapeHtml(m.nome) + '</span> ' + (badgesTopicos || '<span class="text-muted" style="font-size:10px; font-style:italic;">Sem tópicos vinculados</span>') + '</div></div>';
+                
+                poolCards += itemHtml;
+            });
+        }
+    });
+
+    if(badgeTotal) badgeTotal.innerText = totalItens + " Itens Mapeados";
+
+    if(poolCards === "") {
+        listaHtml.innerHTML = '<div class="text-center p-5 text-muted"><i class="material-icons opacity-25 mb-2" style="font-size:40px;">inventory</i><p class="small m-0">Celeiro vazio. Use o painel à esquerda para indexar apostilas ou vídeos!</p></div>';
+    } else {
+        listaHtml.innerHTML = poolCards;
+    }
+}
+
+// 3. AÇÃO DE INTEGRAÇÃO FANTÁSTICA: "Levar para a Mesa" (VERSÃO REAL VIA DRIVE)
+window.levarMaterialParaMesa = function(url, nome, tipo) {
+    // INJEÇÃO DE CONTEXTO: Identifica e salva a Jornada e a Matéria no localStorage para a IA ler depois
+    if (typeof jAtiva !== 'undefined' && jAtiva) {
+        localStorage.setItem('jornada_ativa_nome', jAtiva.titulo || 'Estudo Independente');
+        
+        // Varre as matérias da jornada para descobrir a qual delas este material pertence
+        const materiaEncontrada = (jAtiva.materias || []).find(m => 
+            (m.materiais || []).some(mat => mat.url === url || mat.id === url || mat.nome === nome)
+        );
+        
+        if (materiaEncontrada) {
+            localStorage.setItem('materia_ativa_nome', materiaEncontrada.nome || 'Matéria Não Especificada');
+            localStorage.setItem('modulo_ativo_nome', materiaEncontrada.nome || 'Módulo Geral');
+        }
+    }
+
+    // 1. Esconde o Quartel General da Jornada
+    const modalEl = document.getElementById('modalPainelJornada');
+    if(modalEl) { try { bootstrap.Modal.getInstance(modalEl).hide(); } catch(e){} }
+    
+    // 2. Muda para a View da Mesa
+    if(typeof mostrarView === 'function') mostrarView('pdf-studio-view');
+    
+    // 3. Se for um link web comum (YouTube/Site), abre noutra aba
+    if(tipo === 'link') {
+        if(typeof showToast === 'function') showToast("Link aberto! Cole o conteúdo no Copiloto IA do Chat.", "success");
+        window.open(url, '_blank');
+        return;
+    }
+
+    if(typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal(`Transferindo [${nome}] do Celeiro...`);
+    
+    // 4. Puxa o Ficheiro Físico do Google Drive
+    google.script.run
+        .withSuccessHandler(resp => {
+            if (resp.success) {
+                if(typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal(`Processando páginas de [${nome}]...`);
+                
+                // Converte a string Base64 devolvida pelo servidor de volta num Blob/File Array nativo
+                const byteCharacters = atob(resp.base64);
+                const byteNumbers = new Array(byteCharacters.length);
+                for (let i = 0; i < byteCharacters.length; i++) {
+                    byteNumbers[i] = byteCharacters.charCodeAt(i);
+                }
+                const byteArray = new Uint8Array(byteNumbers);
+                
+                // Cria um arquivo Físico no navegador
+                const file = new File([byteArray], nome, { type: resp.mimeType });
+                
+                // Atira o ficheiro para o Motor Original da Mesa de Estudos!
+                if (typeof loadPdfs === 'function') {
+                    loadPdfs([file]);
+                    if(typeof forcarNovaMooDica === 'function') setTimeout(forcarNovaMooDica, 800);
+                } else {
+                    if(typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
+                }
+            } else {
+                if(typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
+                alert("Erro ao puxar o arquivo do Celeiro: " + resp.error);
+            }
+        })
+        .withFailureHandler(err => {
+            if(typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
+            alert("Falha de rede ao tentar acessar o Celeiro.");
+        })
+        .obterFicheiroDoDriveBase64(url);
+};
+
+// ==========================================================================
+// CRUD NO PLANILHA VIA JSON ACERVO (CELEIRO)
+// ==========================================================================
+window.executarUploadFicheiroCeleiro = function(files) {
+    if(!files || files.length === 0) return;
+    const seletorMateria = document.getElementById('jor-material-materia-seletor');
+    const mIdx = seletorMateria.value;
+    
+    if(mIdx === "") { alert("Por favor, crie ou selecione uma disciplina para albergar o arquivo."); return; }
+
+    const file = files[0];
+    const extension = file.name.split('.').pop().toLowerCase();
+    let tipoCalculado = 'pdf';
+    if(['png','jpg','jpeg'].includes(extension)) tipoCalculado = 'image';
+    if(['docx','doc'].includes(extension)) tipoCalculado = 'docx';
+
+    const checkedBoxes = document.querySelectorAll('.jor-topic-check:checked');
+    const topicosMapeados = Array.from(checkedBoxes).map(cb => cb.value);
+
+    mostrarLoaderGlobal("Enviando arquivo para a pasta MoogIA_Assets no seu Drive...");
+    
+    const reader = new FileReader();
+    reader.onloadend = function() {
+        google.script.run.withSuccessHandler(resp => {
+            if(resp.success) {
+                if(!jAtiva.materias[mIdx].materiais) jAtiva.materias[mIdx].materiais = [];
+                jAtiva.materias[mIdx].materiais.push({
+                    id: 'doc-' + Math.random().toString(36).substr(2, 9),
+                    nome: file.name,
+                    tipo: tipoCalculado,
+                    url: resp.url,
+                    topicos: topicosMapeados,
+                    data: new Date().toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit', year:'numeric'})
+                });
+                salvarModificacoesDoCeleiroNoServidor("Ficheiro indexado e mapeado com sucesso!");
+                
+                // GATILHO DA GAMIFICAÇÃO INJETADO AQUI
+                if (typeof dispararAcaoGamificacao === 'function') dispararAcaoGamificacao('upload_pdf');
+                
+                document.getElementById('jor-upload-file-real').value = ""; 
+            } else {
+                ocultarLoaderGlobal();
+                alert("Erro físico de upload no Drive: " + resp.error);
+            }
+        }).uploadImagemAsset(reader.result, file.name);
+    };
+    reader.readAsDataURL(file);
+};
+
+window.executarAdicionarLinkCeleiro = function() {
+    const inputUrl = document.getElementById('jor-upload-url-real');
+    const seletorMateria = document.getElementById('jor-material-materia-seletor');
+    const mIdx = seletorMateria.value;
+    const urlValue = inputUrl.value.trim();
+
+    if(!urlValue) { alert("Insira um link de destino válido!"); return; }
+    if(mIdx === "") { alert("Selecione uma disciplina para vincular o link!"); return; }
+
+    const checkedBoxes = document.querySelectorAll('.jor-topic-check:checked');
+    const topicosMapeados = Array.from(checkedBoxes).map(cb => cb.value);
+
+    if(!jAtiva.materias[mIdx].materiais) jAtiva.materias[mIdx].materiais = [];
+    let nomeAmigo = urlValue.includes("youtube.com") || urlValue.includes("youtu.be") ? "Videoaula - YouTube" : "Link de Referência Externa";
+
+    jAtiva.materias[mIdx].materiais.push({
+        id: 'lnk-' + Math.random().toString(36).substr(2, 9),
+        nome: nomeAmigo,
+        tipo: 'link',
+        url: urlValue,
+        topicos: topicosMapeados,
+        data: new Date().toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit', year:'numeric'})
+    });
+
+    salvarModificacoesDoCeleiroNoServidor("Link indexado com sucesso!");
+    
+    // GATILHO DA GAMIFICAÇÃO INJETADO AQUI
+    if (typeof dispararAcaoGamificacao === 'function') dispararAcaoGamificacao('upload_pdf');
+    
+    inputUrl.value = ""; 
+};
+
+window.executarExcluirMaterialCeleiro = function(materiaIndex, materialIndex) {
+    if(!confirm("Deseja realmente remover permanentemente este material do Celeiro?")) return;
+    jAtiva.materias[materiaIndex].materiais.splice(materialIndex, 1);
+    salvarModificacoesDoCeleiroNoServidor("Material removido do acervo.");
+};
+
+function renderizarArvoreDisciplinas() {
+    const accord = document.getElementById('jor-accordion-estrutura');
+    if(!accord) return;
+
+    if (!jAtiva.materias || jAtiva.materias.length === 0) {
+        accord.innerHTML = '<div class="p-3 text-muted text-center small bg-light rounded-3">Nenhuma disciplina cadastrada na grade curricular.</div>';
+        return;
+    }
+
+    let arrHtml = "";
+    jAtiva.materias.forEach((m, mIdx) => {
+        const collapseId = 'panel-coll-mat-' + mIdx;
+        let topicosHtml = "";
+        
+        if (m.topicos && m.topicos.length > 0) {
+            m.topicos.forEach((t, tIdx) => {
+                topicosHtml += '<div class="p-2 border-bottom small text-secondary d-flex justify-content-between align-items-center ps-4 bg-white"><span class="d-flex align-items-center gap-2"><i class="material-icons opacity-50" style="font-size: 14px;">subdirectory_arrow_right</i> ' + escapeHtml(t) + '</span><button class="btn btn-link text-danger p-0 m-0 text-decoration-none d-flex" onclick="executarExcluirTopicoManual(' + mIdx + ', ' + tIdx + ')" title="Excluir Tópico"><i class="material-icons" style="font-size: 16px;">close</i></button></div>';
+            });
+        } else {
+            topicosHtml = '<div class="p-3 text-muted small text-center bg-white">Nenhum tópico listado para este módulo.</div>';
+        }
+
+        let innerAcc = '<div class="accordion-item mb-2 border rounded-3 overflow-hidden shadow-sm"><h2 class="accordion-header"><button class="accordion-button collapsed fw-bold text-dark p-3 bg-light" type="button" data-bs-toggle="collapse" data-bs-target="#' + collapseId + '">';
+        innerAcc += '<div class="d-flex justify-content-between w-100 align-items-center pe-3"><span><i class="material-icons text-primary align-middle me-2">book</i> ' + escapeHtml(m.nome) + '</span>';
+        innerAcc += '<div class="d-flex align-items-center gap-2"><span class="badge bg-white text-secondary border shadow-sm small" style="font-size:11px;">Peso: ' + (m.peso_sugerido || m.peso || 1) + '</span><span onclick="event.stopPropagation(); executarExcluirMateriaManual(' + mIdx + ')" class="text-danger d-flex shadow-sm bg-white rounded-circle p-1 border hover-scale" title="Remover Matéria"><i class="material-icons" style="font-size:14px;">delete</i></span></div></div></button></h2>';
+        innerAcc += '<div id="' + collapseId + '" class="accordion-collapse collapse" data-bs-parent="#jor-accordion-estrutura"><div class="accordion-body p-0 bg-white">' + topicosHtml + '<div class="p-2 text-center bg-light border-top"><button class="btn btn-sm btn-link text-primary text-decoration-none fw-bold small p-0 d-inline-flex align-items-center gap-1" onclick="executarAdicionarTopicoManual(' + mIdx + ')"><i class="material-icons" style="font-size:16px;">add</i> Inserir Tópico</button></div></div></div></div>';
+        
+        arrHtml += innerAcc;
+    });
+    
+    accord.innerHTML = arrHtml;
+}
+
+window.executarAdicionarMateriaManual = function() {
+    const nome = prompt("Muuu! Qual é o nome da nova Disciplina/Matéria que deseja anexar à grade?");
+    if(!nome || !nome.trim()) return;
+    if(!jAtiva.materias) jAtiva.materias = [];
+    jAtiva.materias.push({ nome: nome.trim(), peso: 1, materiais: [], topicos: [] });
+    salvarModificacoesDoCeleiroNoServidor("Disciplina anexada com sucesso!");
+    const seletorMateria = document.getElementById('jor-material-materia-seletor');
+    if(seletorMateria) {
+        let optHtml = "";
+        jAtiva.materias.forEach((m, i) => { optHtml += '<option value="' + i + '">' + escapeHtml(m.nome) + '</option>'; });
+        seletorMateria.innerHTML = optHtml;
+        atualizarSeletorTopicosMateriais();
+    }
+};
+
+window.executarExcluirMateriaManual = function(mIdx) {
+    if(!confirm("Deseja realmente excluir esta disciplina? Todos os materiais vinculados a ela serão perdidos.")) return;
+    jAtiva.materias.splice(mIdx, 1);
+    salvarModificacoesDoCeleiroNoServidor("Módulo removido da grade.");
+};
+
+window.executarAdicionarTopicoManual = function(mIdx) {
+    const nomeTopico = prompt("Inserir novo tópico:\nDigite o título do assunto:");
+    if(!nomeTopico || !nomeTopico.trim()) return;
+    if(!jAtiva.materias[mIdx].topicos) jAtiva.materias[mIdx].topicos = [];
+    jAtiva.materias[mIdx].topicos.push(nomeTopico.trim());
+    salvarModificacoesDoCeleiroNoServidor("Novo assunto mapeado!");
+    atualizarSeletorTopicosMateriais(); 
+};
+
+window.executarExcluirTopicoManual = function(mIdx, tIdx) {
+    jAtiva.materias[mIdx].topicos.splice(tIdx, 1);
+    salvarModificacoesDoCeleiroNoServidor("Assunto removido.");
+    atualizarSeletorTopicosMateriais();
+};
+
+function salvarModificacoesDoCeleiroNoServidor(mensagemSucesso) {
+    const email = localStorage.getItem('usuario_email');
+    if(!email || !jAtiva) return;
+    if(typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal("Sincronizando alterações na planilha mãe...");
+
+    google.script.run
+        .withSuccessHandler(resp => {
+            if(typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
+            if(resp.success) {
+                if(typeof showToast === 'function') showToast(mensagemSucesso, "success");
+                const idxCache = minhasJornadas.findIndex(j => j.id === jAtiva.id);
+                if(idxCache > -1) minhasJornadas[idxCache] = jnodeClone(jAtiva);
+                render_painel_remanescentes();
+            } else {
+                alert("Erro ao gravar na planilha: " + resp.error);
+            }
+        })
+        .withFailureHandler(err => {
+            if(typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
+            alert("Queda de pacotes RPC de comunicação remota.");
+        })
+        .salvarDadosCompletosJornadaBD(email, jAtiva.id, jAtiva);
+}
+
+function render_painel_remanescentes() {
+    renderizarMateriaisDoCeleiro();
+    renderizarHtmlAbasInternasEstaticas();
+    if(typeof renderizarGridJornadas === 'function') renderizarGridJornadas();
+}
+
+function renderizarHtmlAbasInternasEstaticas() {
+    renderizarOriginalAccordionAbaDois();
+}
+
+function renderizarOriginalAccordionAbaDois() {
+    renderizarControlesMapeadosGrade();
+}
+
+function renderizarControlesMapeadosGrade() {
+    renderizarArvoreDisciplinas();
+}
+
+function jnodeClone(obj) {
+    return JSON.parse(JSON.stringify(obj));
+}
+
+window.executarRenomearJornada = function(idJornada, tituloAtual) {
+    const email = localStorage.getItem('usuario_email');
+    if(!email) return;
+
+    const novoNome = prompt("Muuu! Qual vai ser o novo nome da jornada de estudos?", tituloAtual);
+    if (novoNome === null) return; 
+    
+    const nomeLimpo = novoNome.trim();
+    if (!nomeLimpo || nomeLimpo === tituloAtual) return;
+
+    if(typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal("A atualizar o nome da jornada...");
+
+    google.script.run
+        .withSuccessHandler(resp => {
+            if(typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
+            if(resp.success) {
+                if(typeof showToast === 'function') showToast("Jornada renomeada com sucesso!", "success");
+                carregarJornadasAtivas(); 
+            } else {
+                alert("Erro ao renomear: " + resp.error);
+            }
+        })
+        .withFailureHandler(err => {
+            if(typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
+            alert("Erro físico de rede com o Google Sheets.");
+        })
+        .renomearJornadaBD(email, idJornada, nomeLimpo);
+};
+
+window.executarExcluirJornada = function(idJornada, titulo) {
+    const email = localStorage.getItem('usuario_email');
+    if(!email) return;
+
+    const confirmar = confirm("Tens a certeza de que desejas excluir e arquivar esta jornada?");
+    if(!confirmar) return;
+
+    if(typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal("A remover jornada da mesa...");
+
+    google.script.run
+        .withSuccessHandler(resp => {
+            if(typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
+            if(resp.success) {
+                if(typeof showToast === 'function') showToast("Jornada arquivada e movida com sucesso.", "info");
+                carregarJornadasAtivas(); 
+            } else {
+                alert("Erro ao arquivar: " + resp.error);
+            }
+        })
+        .withFailureHandler(err => {
+            if(typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
+            alert("Falha fatal na comunicação de banco de dados.");
+        })
+        .deletarJornadaBD(email, idJornada);
+};
+
 function abrirModalJornadaManual() {
     const modalEl = document.getElementById('modalJornadaManual');
     if (!modalEl) return;
-    
-    // Limpa os campos antes de abrir
     document.getElementById('manual-jornada-nome').value = '';
     document.getElementById('manual-jornada-materias').value = '';
-    
     new bootstrap.Modal(modalEl).show();
 }
 
@@ -315,7 +777,7 @@ function salvarJornadaManual() {
 
     const nome = document.getElementById('manual-jornada-nome').value.trim();
     const tipo = document.getElementById('manual-jornada-tipo').value;
-    const nivel = document.getElementById('manual-jornada-nivel').value; // Captura o novo campo
+    const nivel = document.getElementById('manual-jornada-nivel').value; 
     const materiasStr = document.getElementById('manual-jornada-materias').value.trim();
 
     if(!nome || !materiasStr) {
@@ -326,12 +788,12 @@ function salvarJornadaManual() {
     const arrayMaterias = materiasStr.split(',')
         .map(m => m.trim())
         .filter(m => m.length > 0)
-        .map(m => ({ nome: m, peso: 1, materiais: [] })); // Nas manuais o peso padrão é 1
+        .map(m => ({ nome: m, peso: 1, materiais: [], topicos: [] }));
 
     const novaJornadaDados = {
         titulo: nome,
         tipo: tipo,
-        nivel: nivel, // Incluído aqui!
+        nivel: nivel, 
         dataProva: '',
         temRoteiro: false,
         materias: arrayMaterias
@@ -339,21 +801,14 @@ function salvarJornadaManual() {
 
     if(typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal("A gravar Jornada...");
 
-    // Envia para o Backend
     google.script.run
         .withSuccessHandler(resp => {
             if(typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
-            
             if (resp.success) {
                 const modalEl = document.getElementById('modalJornadaManual');
-                if (modalEl) {
-                    try { bootstrap.Modal.getInstance(modalEl).hide(); } catch(e){}
-                }
-                
-                carregarJornadasAtivas(); // Pede à BD a lista atualizada
+                if (modalEl) { try { bootstrap.Modal.getInstance(modalEl).hide(); } catch(e){} }
+                carregarJornadasAtivas(); 
                 if(typeof showToast === 'function') showToast("Jornada criada com sucesso!", "success");
-                
-                // Gamificação: Dá XP pela organização
                 ganharXP(20, {clientX: window.innerWidth/2, clientY: window.innerHeight/2});
             } else {
                 if(typeof showToast === 'function') showToast("Erro: " + resp.error, "error");
@@ -366,36 +821,6 @@ function salvarJornadaManual() {
         .salvarJornadaBD(email, novaJornadaDados);
 }
 
-function abrirGerenciadorJornada(id) {
-    const jornada = minhasJornadas.find(j => j.id === id);
-    if(!jornada) return;
-
-    document.getElementById('painel-jor-nome').innerText = jornada.titulo || 'Jornada';
-    document.getElementById('painel-jor-tipo').innerText = jornada.tipo || 'Geral';
-
-    // Constrói a lista do cofre lendo os arrays
-    const lista = document.getElementById('painel-jor-materias-lista');
-    if (jornada.materias && jornada.materias.length > 0) {
-        lista.innerHTML = jornada.materias.map(m => {
-            const qtdMateriais = m.materiais ? m.materiais.length : 0;
-            return `
-            <div class="list-group-item border-0 border-bottom bg-transparent px-2 py-3 d-flex justify-content-between align-items-center">
-                <div>
-                   <h6 class="mb-1 fw-bold text-dark text-truncate" style="max-width: 200px;">${escapeHtml(m.nome)}</h6>
-                   <small class="text-muted">${qtdMateriais} anexos</small>
-                </div>
-                <button class="btn btn-sm btn-light text-primary rounded-circle border p-1" title="Anexar Material a esta matéria"><i class="material-icons" style="font-size: 18px;">upload_file</i></button>
-            </div>
-            `;
-        }).join('');
-    } else {
-        lista.innerHTML = `<p class="text-muted small">Nenhuma matéria registada.</p>`;
-    }
-
-    const modalEl = document.getElementById('modalPainelJornada');
-    if(modalEl) new bootstrap.Modal(modalEl).show();
-}
-
 function gerarRoteiroAgenda() {
     const data = document.getElementById('painel-jor-data').value;
     if(!data) { 
@@ -404,19 +829,15 @@ function gerarRoteiroAgenda() {
     }
     
     const modalEl = document.getElementById('modalPainelJornada');
-    if (modalEl) {
-        try { bootstrap.Modal.getInstance(modalEl).hide(); } catch(e){}
-    }
+    if (modalEl) { try { bootstrap.Modal.getInstance(modalEl).hide(); } catch(e){} }
     
     if(typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal("A processar roteiro inteligente...");
     
-    // Simula a lógica de geração de blocos de estudo da IA
     setTimeout(() => {
         if(typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
         if(typeof showToast === 'function') showToast("Roteiro gerado na Agenda!", "success");
         ganharXP(50);
         
-        // Atualiza status da Jornada visualmente
         if(minhasJornadas.length > 0) minhasJornadas[0].temRoteiro = true; 
         renderizarGridJornadas();
         
@@ -425,7 +846,6 @@ function gerarRoteiroAgenda() {
     }, 2500);
 }
 
-// Helper para prevenir XSS no HTML injetado
 if (typeof escapeHtml !== 'function') {
     window.escapeHtml = function(unsafe) {
         return (unsafe || "").toString()
@@ -436,4 +856,494 @@ if (typeof escapeHtml !== 'function') {
              .replace(/'/g, "&#039;");
     };
 }
+
+const moodicasDB = {
+    'default': [
+        "Muuu! Bem-vindo à Estação. Escolhe uma ferramenta na Mesa de Estudos para começarmos a mastigar essa matéria!",
+        "Sabias que estudar em blocos de 25 minutos (Pomodoro) evita a fadiga mental? Até as vacas precisam de descansar entre pastagens.",
+        "Um ambiente organizado ajuda no foco. Limpa a mesa de materiais que já não usas! Um pasto limpo é um pasto feliz.",
+        "Técnica Feynman: Se não consegues explicar esta matéria a um bezerro de 5 anos, é porque ainda não aprendeste direito!",
+        "Estudar com sono é como tentar mugir debaixo d'água. Se estás a fechar os olhos, vai dormir e volta amanhã. O cérebro consolida a memória no sono!",
+        "A hidratação é vital! Bebe água. (Eu prefiro água, o leite é para os negócios).",
+        "A tua Vaquinha evolui contigo. Ganha XP cumprindo as missões da Agenda. Quem sabe não chegas a Vaquinha Mestre?",
+        "Rumina bem as ideias: estuda um pouco, faz uma pausa e volta ao assunto. A repetição é a mãe da retenção.",
+        "Muuuu! Não sejas gado indo sempre atrás dos resumos dos outros. Cria os teus próprios materiais aqui na Estação para fixar melhor!",
+        "Sentado há muito tempo? Levanta-te, estica os cascos e dá uma volta. O movimento ajuda na oxigenação do cérebro.",
+        "Se a ansiedade bater, respira fundo. Ninguém come um prado inteiro de uma só vez; é uma dentada de cada vez."
+    ],
+    'quiz_generator': [
+        "Dica de Mestre: Fazer testes ANTES de estudar ajuda o teu cérebro a focar no que é importante na hora de ler. É o chamado 'Pré-teste'!",
+        "A repetição ativa com simulados aumenta a retenção em até 40%. É musculação para os neurónios!",
+        "Achas que sabes tudo? Pede-me um quiz nível 'Concurso' e vamos ver quem muge por último.",
+        "Simulados são como treinos de pastoreio: preparam-te para não fugires do rebanho no dia da prova.",
+        "Errar no simulado é adubo para o cérebro. Cresce com os erros e não te desmotives!",
+        "Gerar 50 questões de uma vez? Calma aí, vaqueiro! O ideal são blocos de 10 a 15 para não fritares os miolos.",
+        "Usa o gabarito comentado! Ler a explicação da IA sobre o porquê de teres errado é de onde o verdadeiro leite da sabedoria é ordenhado.",
+        "Tenta acertar na resposta mentalmente antes de olhares para as opções. Isso chama-se Evocação Ativa!"
+    ],
+    'summarize': [
+        "Textos gigantes assustam. Pede um 'Resumo Executivo' para criar uma visão geral antes de ires a fundo na relva alta!",
+        "Dica: Usa a opção 'Tópicos Principais' para gerar pontos chave. Fardos de palha compactos são mais fáceis de mastigar.",
+        "Resumir não é só cortar palavras, é extrair a nata do conhecimento!",
+        "Muuuuita informação? Pede à IA para focar estritamente no que é cobrado em provas ou concursos.",
+        "Depois de leres o resumo gerado, olha para o lado e tenta explicá-lo em voz alta. Se engasgares, volta à leitura!",
+        "Não confies cegamente. A IA é esperta, mas tu és o dono da fazenda. Confere se os conceitos vitais estão corretos no material original.",
+        "Um bom resumo deve ser como um bom queijo: curado, direto e sem pontas soltas."
+    ],
+    'chat': [
+        "O teu Tutor IA não morde (nem dá coices). Conversa com a tua matéria para não adormeceres a ler PDFs gigantescos!",
+        "Sejas específico! Quanto mais contexto deres na tua pergunta, mais precisa será a resposta da IA.",
+        "Dificuldades num conceito? Usa o prompt: 'Finge que sou um bezerro e explica-me isto como se eu tivesse 10 anos'.",
+        "Prompt de ouro: 'Cria uma analogia do dia a dia para me ajudar a entender [inserir conceito difícil]'.",
+        "Se a IA inventar (alucinar) dados, puxa-lhe as orelhas! Avisa: 'Tens a certeza? Confirma isso no texto base'.",
+        "Dizer apenas 'não entendi nada' faz a IA chorar leite derramado. Diz-lhe EXATAMENTE onde te perdeste na explicação.",
+        "Pede à IA para te sabatinar! Prompt: 'Faz-me uma pergunta aberta sobre este tema e avalia a minha resposta'."
+    ],
+    'mindmap': [
+        "Os mapas mentais ativam o hemisfério direito do cérebro. Aprenda a ver o pasto inteiro antes de comer a primeira erva!",
+        "Comece pelo centro e vá destrinchando. É assim que a natureza (e o teu cérebro) organiza a informação.",
+        "Mapas mentais são como as teias de aranha do conhecimento. E eu adoro pastar perto delas!",
+        "Se o mapa mental ficar gigante, dá zoom na ferramenta! Não queremos que fiques estrábico.",
+        "Usa os mapas gerados como índice de revisão: passa os olhos pelos ramos principais todos os dias de manhã.",
+        "Guarda o PNG do mapa mental e põe como fundo de ecrã do telemóvel na semana da prova. Memorização passiva ao poder!",
+        "O nível 'Estrutura Simples' é ótimo para revisões rápidas; o 'Detalhado' é para quando estás a desbravar a matéria pela primeira vez."
+    ],
+    'flashcards': [
+        "A repetição espaçada faz milagres. Avalie um cartão como 'Fácil' apenas se souberes MESMO a resposta de caras.",
+        "Cartões curtos são melhores que textões longos. Uma ideia central por cartão facilita a digestão do cérebro!",
+        "Flashcards são a arte de combater a Curva de Esquecimento. É por isso que não te esqueces do que jantaste ontem...",
+        "A regra de ouro: não escrevas a Bíblia num flashcard, ou levas um coice mental!",
+        "Não sejas teimoso como um touro: se erraste o cartão, sê honesto contigo mesmo e revê-o amanhã.",
+        "Os flashcards são os teus melhores amigos em filas de espera. Treina a tua mente enquanto a vida acontece lá fora.",
+        "Pede à IA para gerar perguntas práticas em vez de apenas conceitos teóricos. O cérebro adora resolver problemas!"
+    ],
+    'read_pdf': [
+        "Estudos indicam que ouvir a matéria enquanto se acompanha o texto visualmente melhora o foco. É a dobradinha bovina!",
+        "Usa o Leitor Imersivo quando estiveres com fadiga visual. Fecha os olhos, deita-te num pasto e deixa os ouvidos trabalharem.",
+        "Ouvir a matéria no Leitor TTS é como ouvir o mugido da mãe: constante, ritmado e instrutivo.",
+        "Acelera a velocidade de leitura se o teu cérebro processar a 2x! Mas não exageres ou parecerá que estamos a fugir de um trator.",
+        "Aproveita o Leitor de Áudio para estudares de olhos fechados e praticares a visualização mental da matéria. Isso cimenta a memória!"
+    ],
+    'ocr': [
+        "Lembre-se: Imagens com boa iluminação e sem sombras geram extrações incrivelmente mais precisas.",
+        "Este processo (OCR) transforma imagens paradas num pasto pesquisável pela Inteligência Artificial!",
+        "O meu olho biónico lê tudo, mas fotos tremidas dão-me dores de cabeça. Foca bem antes de clicares!",
+        "Se o teu caderno tem um garrancho que nem tu entendes, não esperes que a IA faça milagres. Caligrafia legível ajuda!",
+        "Podes fotografar quadros de aulas, slides ou livros da biblioteca. O OCR captura a alma do texto para dentro da tua Estação."
+    ]
+};
+
+let mooDicaTimeout;
+
+window.exibirMooDicaAtual = function(toolId = null) {
+    const balao = document.getElementById('moodicas-balao');
+    const texto = document.getElementById('moodicas-texto');
+    if (!balao || !texto) return;
+    
+    let contexto = toolId || (typeof currentTool !== 'undefined' && currentTool ? currentTool : 'default');
+    if (!moodicasDB[contexto]) contexto = 'default';
+    
+    const banco = moodicasDB[contexto];
+    const dicaAleatoria = banco[Math.floor(Math.random() * banco.length)];
+    
+    texto.innerHTML = "<strong>MooDica:</strong> " + dicaAleatoria;
+    
+    balao.classList.remove('show');
+    clearTimeout(mooDicaTimeout);
+    
+    setTimeout(() => {
+        balao.classList.add('show');
+        mooDicaTimeout = setTimeout(() => {
+            balao.classList.remove('show');
+        }, 9000); 
+    }, 150);
+};
+
+window.forcarNovaMooDica = function() {
+    window.exibirMooDicaAtual(null); 
+};
+
+/* ==========================================================================
+   GESTOR DE ADMINISTRAÇÃO DA GAMIFICAÇÃO (VERSÃO BLINDADA)
+   ========================================================================== */
+
+const obterUrlImagemSegura = (url) => {
+    if (!url || typeof url !== 'string') return "https://i.ibb.co/5WHfDf0R/vaquinha.png";
+    const urlLimpa = url.trim();
+    if (urlLimpa.startsWith('http://') || urlLimpa.startsWith('https://')) return urlLimpa;
+    return "https://i.ibb.co/5WHfDf0R/vaquinha.png";
+};
+
+window.carregarTabelasAdminGamificacao = function() {
+    google.script.run.withSuccessHandler(resp => {
+        if(resp.success) {
+            const regras = resp.regras;
+            
+            const tNiveis = document.getElementById('tabela-admin-niveis');
+            if(tNiveis) {
+                let htmlNiv = "";
+                regras.niveis.forEach(n => {
+                    const imgSegura = obterUrlImagemSegura(n.imagem);
+                    htmlNiv += '<tr><td class="fw-bold">Nível ' + n.teto + '</td><td>' + escapeHtml(n.titulo) + '</td>';
+                    htmlNiv += '<td><img src="' + imgSegura + '" style="height: 55px; width: 55px; object-fit: cover; cursor: pointer;" class="rounded-3 shadow-sm border border-2 border-white transition-hover" onclick="abrirModalImagemGrande(\'' + imgSegura + '\')" title="Clique para ampliar" onerror="this.onerror=null; this.src=\'https://i.ibb.co/5WHfDf0R/vaquinha.png\';"></td>';
+                    htmlNiv += '<td><div class="d-flex gap-1"><button class="btn btn-sm btn-light border text-primary p-1" onclick="renomearNivelAdmin(' + n.teto + ', \'' + escapeHtml(n.titulo) + '\')" title="Renomear"><i class="material-icons fs-6">edit</i></button><button class="btn btn-sm btn-light border text-success p-1" onclick="alterarImagemNivelAdmin(' + n.teto + ')" title="Alterar Imagem"><i class="material-icons fs-6">image</i></button><button class="btn btn-sm btn-light border text-danger p-1" onclick="excluirRegra(\'Gamificacao_Niveis\', 1, ' + n.teto + ')" title="Excluir"><i class="material-icons fs-6">delete</i></button></div></td></tr>';
+                });
+                tNiveis.innerHTML = htmlNiv;
+            }
+
+            const tAcoes = document.getElementById('tabela-admin-acoes');
+            if(tAcoes) {
+                let htmlAco = "";
+                regras.acoes.forEach(a => {
+                    htmlAco += '<tr><td class="font-monospace text-primary small">' + escapeHtml(a.gatilho) + '</td><td>' + escapeHtml(a.nome) + '</td><td class="fw-bold text-success">+' + a.pr + ' PR</td><td class="text-muted">' + (a.limite === 0 ? 'Ilimitado' : 'Máx ' + a.limite + '/dia') + '</td><td><button class="btn btn-sm btn-outline-danger p-1" onclick="excluirRegra(\'Gamificacao_Acoes\', 1, \'' + a.gatilho + '\')"><i class="material-icons fs-6">delete</i></button></td></tr>';
+                });
+                tAcoes.innerHTML = htmlAco;
+            }
+
+            const tConquistas = document.getElementById('tabela-admin-conquistas');
+            if(tConquistas) {
+                let htmlConq = "";
+                regras.conquistas.forEach(c => {
+                    const imgBadgeSegura = obterUrlImagemSegura(c.imagem);
+                    htmlConq += '<tr><td><img src="' + imgBadgeSegura + '" height="30" class="rounded-circle shadow-sm" onerror="this.onerror=null; this.src=\'https://i.ibb.co/5WHfDf0R/vaquinha.png\';"></td>';
+                    htmlConq += '<td class="fw-bold">' + escapeHtml(c.nome) + '</td><td class="font-monospace text-muted small">' + escapeHtml(c.alvo) + '</td><td>' + c.meta + 'x</td><td class="fw-bold text-warning">+' + c.bonus + ' PR</td><td><button class="btn btn-sm btn-outline-danger p-1" onclick="excluirRegra(\'Gamificacao_Conquistas\', 1, \'' + c.id + '\')"><i class="material-icons fs-6">delete</i></button></td></tr>';
+                });
+                tConquistas.innerHTML = htmlConq;
+            }
+            
+            RegrasMoogIA = regras;
+            SafeStorage.setItem('moogia_rules', JSON.stringify(regras));
+        }
+    }).carregarRegrasGamificacaoBD();
+};
+
+window.abrirModalImagemGrande = function(url) {
+    document.getElementById('img-grande-preview').src = url;
+    new bootstrap.Modal(document.getElementById('modalImagemGrande')).show();
+};
+
+window.renomearNivelAdmin = function(teto, tituloAtual) {
+    const novoNome = prompt("Renomear Patente:\nDigite o novo título:", tituloAtual);
+    if (!novoNome || novoNome.trim() === tituloAtual) return;
+    
+    mostrarLoaderGlobal("A atualizar o nome da patente...");
+    google.script.run.withSuccessHandler(resp => {
+        ocultarLoaderGlobal();
+        if (resp.success) carregarTabelasAdminGamificacao();
+        else alert("Erro ao renomear: " + resp.error);
+    }).atualizarNomeNivelBD(teto, novoNome.trim());
+};
+
+let tetoAguardandoImagem = null;
+
+window.alterarImagemNivelAdmin = function(teto) {
+    tetoAguardandoImagem = teto;
+    document.getElementById('input-alterar-img-nivel').click(); 
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+    const inputAltImg = document.getElementById('input-alterar-img-nivel');
+    if (inputAltImg) {
+        inputAltImg.addEventListener('change', function() {
+            if (!this.files || this.files.length === 0) return;
+            const file = this.files[0];
+            const reader = new FileReader();
+            
+            reader.onloadend = () => {
+                mostrarLoaderGlobal("A enviar nova imagem para o Google Drive...");
+                google.script.run.withSuccessHandler(resp => {
+                    if (resp.success) {
+                        mostrarLoaderGlobal("A vincular imagem à patente...");
+                        google.script.run.withSuccessHandler(r2 => {
+                            ocultarLoaderGlobal();
+                            inputAltImg.value = ""; 
+                            if (r2.success) carregarTabelasAdminGamificacao(); 
+                            else alert("Erro ao guardar na planilha: " + r2.error);
+                        }).atualizarImagemNivelBD(tetoAguardandoImagem, resp.url);
+                    } else {
+                        ocultarLoaderGlobal();
+                        inputAltImg.value = "";
+                        alert("Erro no Upload para o Drive: " + resp.error);
+                    }
+                }).uploadImagemAsset(reader.result, file.name);
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+});
+
+window.excluirRegra = function(aba, col, id) {
+    if(!confirm("Tem a certeza que deseja excluir esta regra?")) return;
+    mostrarLoaderGlobal("A remover regra...");
+    google.script.run.withSuccessHandler(resp => {
+        ocultarLoaderGlobal();
+        if(resp.success) carregarTabelasAdminGamificacao();
+        else alert("Erro: " + resp.error);
+    }).excluirRegraGamificacaoBD(aba, col, id);
+};
+
+window.submeterFormularioNivel = function() {
+    const teto = document.getElementById('admin-nivel-teto').value;
+    const titulo = document.getElementById('admin-nivel-titulo').value;
+    const inputImg = document.getElementById('admin-nivel-imagem');
+    const inputUrl = document.getElementById('admin-nivel-url').value;
+
+    if (!teto || !titulo) { alert("Preencha o teto e o título!"); return; }
+
+    const salvarFinal = (urlImagem) => {
+        mostrarLoaderGlobal("A gravar Nível na Base de Dados...");
+        google.script.run.withSuccessHandler(resp => {
+            ocultarLoaderGlobal();
+            bootstrap.Modal.getInstance(document.getElementById('modalAdminNivel')).hide();
+            carregarTabelasAdminGamificacao();
+        }).salvarRegraNivelBD(teto, titulo, urlImagem);
+    };
+
+    if (inputImg.files.length > 0) {
+        mostrarLoaderGlobal("A enviar imagem para o Google Drive...");
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            google.script.run.withSuccessHandler(resp => {
+                if (resp.success) salvarFinal(resp.url);
+                else { ocultarLoaderGlobal(); alert("Erro Upload: " + resp.error); }
+            }).uploadImagemAsset(reader.result, inputImg.files[0].name);
+        };
+        reader.readAsDataURL(inputImg.files[0]);
+    } else {
+        salvarFinal(inputUrl || "https://i.ibb.co/5WHfDf0R/vaquinha.png");
+    }
+};
+
+window.submeterFormularioAcao = function() {
+    const gatilho = document.getElementById('admin-acao-gatilho').value;
+    const nome = document.getElementById('admin-acao-nome').value;
+    const pr = document.getElementById('admin-acao-pr').value;
+    const limite = document.getElementById('admin-acao-limite').value || 0;
+
+    if (!gatilho || !nome || !pr) { alert("Preencha todos os campos obrigatórios!"); return; }
+    
+    mostrarLoaderGlobal("A gravar Ação...");
+    google.script.run.withSuccessHandler(resp => {
+        ocultarLoaderGlobal();
+        bootstrap.Modal.getInstance(document.getElementById('modalAdminAcao')).hide();
+        carregarTabelasAdminGamificacao();
+    }).salvarRegraAcaoBD(gatilho, nome, pr, limite);
+};
+
+window.submeterFormularioConquista = function() {
+    const id = document.getElementById('admin-conquista-id').value;
+    const nome = document.getElementById('admin-conquista-nome').value;
+    const alvo = document.getElementById('admin-conquista-alvo').value;
+    const meta = document.getElementById('admin-conquista-meta').value;
+    const bonus = document.getElementById('admin-conquista-bonus').value;
+    const inputImg = document.getElementById('admin-conquista-imagem');
+
+    if (!id || !nome || !alvo || !meta) { alert("Preencha todos os campos!"); return; }
+
+    const salvarFinal = (urlImagem) => {
+        mostrarLoaderGlobal("A gravar Badge...");
+        google.script.run.withSuccessHandler(resp => {
+            ocultarLoaderGlobal();
+            bootstrap.Modal.getInstance(document.getElementById('modalAdminConquista')).hide();
+            carregarTabelasAdminGamificacao();
+        }).salvarRegraConquistaBD(id, nome, alvo, meta, bonus, urlImagem);
+    };
+
+    if (inputImg.files.length > 0) {
+        mostrarLoaderGlobal("A enviar arte para o Google Drive...");
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            google.script.run.withSuccessHandler(resp => {
+                if (resp.success) salvarFinal(resp.url);
+                else { ocultarLoaderGlobal(); alert("Erro Upload: " + resp.error); }
+            }).uploadImagemAsset(reader.result, inputImg.files[0].name);
+        };
+        reader.readAsDataURL(inputImg.files[0]);
+    } else {
+        salvarFinal("https://i.ibb.co/5WHfDf0R/vaquinha.png"); 
+    }
+};
+
+/* ==========================================================================
+   FUNÇÕES GLOBAIS DE CARREGAMENTO (LOADER)
+   ========================================================================== */
+window.mostrarLoaderGlobal = function(mensagem) {
+    const loader = document.getElementById('init-loader');
+    if (loader) {
+        const textoEl = loader.querySelector('p');
+        if (textoEl) textoEl.innerText = mensagem || "Aguarde...";
+        loader.style.display = 'flex';
+    }
+};
+
+window.ocultarLoaderGlobal = function() {
+    const loader = document.getElementById('init-loader');
+    if (loader) loader.style.display = 'none';
+};
+
+/**
+ * Consulta a nuvem e atualiza a interface com a sequência atual de estudos (Streak)
+ */
+window.atualizarSequenciaDashboard = function() {
+    const email = localStorage.getItem('usuario_email');
+    if (!email) return;
+
+    const elDias = document.getElementById('dash-streak-days');
+    const elSub = document.getElementById('dash-streak-sub');
+
+    google.script.run.withSuccessHandler(resp => {
+        if (resp.success && elDias && elSub) {
+            elDias.innerText = resp.streak + (resp.streak === 1 ? " Dia" : " Dias");
+            elSub.innerText = resp.subtexto;
+        }
+    }).calcularSequenciaEstudosBD(email);
+};
+
+/* ==========================================================================
+   SUPER TELA: MEU PERFIL, ESTATÍSTICAS, JORNADAS E LOGS
+   ========================================================================== */
+
+window.abrirMeuPerfil = function() {
+    if(typeof mostrarView === 'function') mostrarView('perfil-view');
+    
+    const email = localStorage.getItem('usuario_email') || '';
+    const nome = localStorage.getItem('usuario_nome') || 'Estudante';
+    
+    // 1. Renderização Imediata (Identidade e Cache Local)
+    document.getElementById('perfil-nome').innerText = nome;
+    document.getElementById('perfil-input-nome').value = nome;
+    document.getElementById('perfil-email').innerText = email;
+    document.getElementById('perfil-avatar-inicial').innerText = nome.charAt(0).toUpperCase();
+    
+    document.getElementById('perfil-xp-total').innerText = (typeof globalXP !== 'undefined' ? globalXP : 0) + " PR";
+    document.getElementById('perfil-nivel').innerText = (typeof globalLevel !== 'undefined' ? globalLevel : 1);
+    const rankEl = document.getElementById('painel-rank');
+    document.getElementById('perfil-rank').innerText = rankEl ? rankEl.innerText : 'Vaquinha Estudante';
+    
+    // 2. Prepara a UI com Loaders para aguardar o Banco de Dados
+    document.getElementById('perfil-jornadas-lista').innerHTML = '<div class="text-center p-4"><div class="spinner-border spinner-border-sm text-primary mb-2"></div><p class="small text-muted m-0">Sincronizando jornadas...</p></div>';
+    document.getElementById('perfil-logs-lista').innerHTML = '<div class="text-center p-4"><div class="spinner-border spinner-border-sm text-secondary mb-2"></div><p class="small text-muted m-0">Buscando histórico...</p></div>';
+    
+    // 3. Chamada Única e Robusta para a Nuvem
+    google.script.run.withSuccessHandler(resp => {
+        if(resp.success) {
+            const server = resp.dados;
+            
+            // Renderiza Estatísticas Precisas
+            document.getElementById('stat-resumos').innerText = server.stats.resumos;
+            document.getElementById('stat-quizzes').innerText = server.stats.quizzes;
+            document.getElementById('stat-mapas').innerText = server.stats.mapas;
+            document.getElementById('stat-cartoes').innerText = server.stats.cartoes;
+            
+            // Renderiza Jornadas
+            const divJornadas = document.getElementById('perfil-jornadas-lista');
+            if (server.jornadas.length > 0) {
+                let jorHtml = '<div class="d-flex flex-column gap-3">';
+                server.jornadas.forEach(j => {
+                    jorHtml += `
+                    <div class="border rounded-3 p-3 bg-light transition-hover shadow-sm">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <h6 class="fw-bold text-dark m-0 d-flex align-items-center gap-2">
+                                <i class="material-icons text-primary" style="font-size: 18px;">map</i> ${escapeHtml(j.titulo)}
+                            </h6>
+                            <span class="badge bg-primary-subtle text-primary border">${escapeHtml(j.tipo)}</span>
+                        </div>
+                        <div class="small text-muted d-flex gap-3">
+                            <span><i class="material-icons align-middle" style="font-size: 14px;">menu_book</i> ${j.qtdMaterias} Matérias</span>
+                            <span><i class="material-icons align-middle" style="font-size: 14px;">event</i> Nível: ${escapeHtml(j.nivel)}</span>
+                        </div>
+                    </div>`;
+                });
+                jorHtml += '</div>';
+                divJornadas.innerHTML = jorHtml;
+            } else {
+                divJornadas.innerHTML = '<div class="text-center p-4 text-muted"><i class="material-icons opacity-25 mb-2" style="font-size:40px;">route</i><p class="small m-0">Nenhuma jornada criada ainda.</p></div>';
+            }
+            
+            // Renderiza Logs
+            const ulLogs = document.getElementById('perfil-logs-lista');
+            if (server.logs.length > 0) {
+                let html = '';
+                server.logs.forEach(log => {
+                    const d = new Date(log.dataIso);
+                    const dataStr = d.toLocaleDateString('pt-BR') + ' às ' + d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+                    
+                    let acaoAmigavel = log.acao;
+                    let icone = 'bolt';
+                    let cor = 'primary';
+                    
+                    if(log.acao === 'upload_pdf') { acaoAmigavel = 'Indexou um novo material'; icone = 'cloud_upload'; cor = 'info'; }
+                    else if(log.acao === 'gerar_summarize') { acaoAmigavel = 'Gerou um Resumo IA'; icone = 'auto_awesome'; cor = 'purple'; }
+                    else if(log.acao === 'gerar_quiz') { acaoAmigavel = 'Gerou um Simulado IA'; icone = 'school'; cor = 'success'; }
+                    else if(log.acao === 'gerar_mindmap') { acaoAmigavel = 'Criou um Mapa Mental'; icone = 'account_tree'; cor = 'danger'; }
+                    else if(log.acao === 'gerar_flashcards') { acaoAmigavel = 'Gerou Flashcards'; icone = 'style'; cor = 'warning'; }
+                    else if(log.acao === 'concluir_tarefa_agenda') { acaoAmigavel = 'Cumpriu missão da agenda'; icone = 'check_circle'; cor = 'success'; }
+                    else if(log.acao === 'criar_jornada') { acaoAmigavel = 'Criou nova Jornada'; icone = 'route'; cor = 'primary'; }
+                    else if(log.acao === 'organizar_acervo') { acaoAmigavel = 'Reorganizou metadados do acervo'; icone = 'edit_note'; cor = 'secondary'; }
+                    
+                    html += `
+                    <li class="list-group-item border-bottom d-flex align-items-center gap-3 py-3 px-4 transition-hover">
+                        <div class="bg-${cor}-subtle text-${cor} p-2 rounded-circle d-flex align-items-center justify-content-center shadow-sm"><i class="material-icons fs-6">${icone}</i></div>
+                        <div>
+                            <div class="fw-bold text-dark small">${acaoAmigavel}</div>
+                            <div class="text-muted" style="font-size: 11px;">${dataStr}</div>
+                        </div>
+                    </li>`;
+                });
+                ulLogs.innerHTML = html;
+            } else {
+                ulLogs.innerHTML = '<div class="text-muted small p-4 text-center">Nenhum histórico recente encontrado. A sua evolução começa agora!</div>';
+            }
+        }
+    }).buscarDadosPerfilBD(email);
+};
+
+/* --- FUNÇÕES DE EDIÇÃO DO PERFIL --- */
+window.toggleEditPerfil = function() {
+    const displayMode = document.getElementById('perfil-display-mode');
+    const editMode = document.getElementById('perfil-edit-mode');
+    if (displayMode.style.display === 'none') {
+        displayMode.style.display = 'block';
+        editMode.style.display = 'none';
+    } else {
+        displayMode.style.display = 'none';
+        editMode.style.display = 'block';
+        document.getElementById('perfil-input-nome').focus();
+    }
+};
+
+window.salvarEdicaoPerfil = function() {
+    const novoNome = document.getElementById('perfil-input-nome').value.trim();
+    if(!novoNome) {
+        if(typeof showToast === 'function') showToast("O nome não pode ficar vazio.", "warning");
+        return;
+    }
+    
+    const email = localStorage.getItem('usuario_email');
+    if(typeof mostrarLoaderGlobal === 'function') mostrarLoaderGlobal("A atualizar o perfil na base de dados...");
+    
+    google.script.run.withSuccessHandler(resp => {
+        if(typeof ocultarLoaderGlobal === 'function') ocultarLoaderGlobal();
+        if(resp.success) {
+            // Atualiza localmente e reflete visualmente
+            localStorage.setItem('usuario_nome', novoNome);
+            if(typeof SafeStorage !== 'undefined') SafeStorage.setItem('usuario_nome', novoNome);
+            
+            document.getElementById('perfil-nome').innerText = novoNome;
+            document.getElementById('perfil-avatar-inicial').innerText = novoNome.charAt(0).toUpperCase();
+            
+            // Atualiza a saudação do Dashboard também
+            const saudacaoDash = document.getElementById('dash-greeting');
+            if(saudacaoDash) {
+                saudacaoDash.innerHTML = `<span class="texto-gradiente-roxo">Olá, ${novoNome}!</span> 👋`;
+            }
+            
+            window.toggleEditPerfil();
+            if(typeof showToast === 'function') showToast("Perfil atualizado com sucesso!", "success");
+        } else {
+            alert("Erro ao atualizar o perfil: " + resp.error);
+        }
+    }).atualizarPerfilUsuarioBD(email, novoNome);
+};
+
 </script>
