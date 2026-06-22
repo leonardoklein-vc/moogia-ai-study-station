@@ -466,8 +466,8 @@ function renderPdfGrid() {
         </div>
         <h4 class="fw-bold text-secondary mb-1">A sua mesa de estudos está vazia</h4>
         <p class="opacity-75 text-center mb-4" style="max-width: 320px;">Arraste e solte materiais aqui<br><small>(PDF, Word ou Imagens)</small></p>
-        <button class="btn btn-light border border-secondary-subtle rounded-pill px-4 shadow-sm pulse-btn-add fw-semibold text-secondary d-flex align-items-center" onclick="document.getElementById('pdf-add-input').click()">
-           <i class="material-icons align-middle fs-6 me-2">search</i> Procurar no Computador
+        <button class="btn btn-light border border-secondary-subtle rounded-pill px-4 shadow-sm pulse-btn-add fw-semibold text-secondary d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#modalAdicionarMaterialMesa">
+           <i class="material-icons align-middle fs-6 me-2">search</i> Procurar Material
         </button>
       </div>
     `;
@@ -617,5 +617,288 @@ document.addEventListener('DOMContentLoaded', () => {
       });
   }
 });
+
+/* --------------------------------------------------------------------------
+   LÓGICA DO MODAL: ADICIONAR MATERIAL À MESA
+   -------------------------------------------------------------------------- */
+document.addEventListener('DOMContentLoaded', () => {
+    const modalAddMesa = document.getElementById('modalAdicionarMaterialMesa');
+    if(modalAddMesa) {
+        modalAddMesa.addEventListener('show.bs.modal', () => {
+            const selJornada = document.getElementById('modal-add-mesa-jornada');
+            if(selJornada && typeof minhasJornadas !== 'undefined') {
+                if(minhasJornadas.length === 0) {
+                    selJornada.innerHTML = '<option value="">Nenhuma jornada encontrada</option>';
+                    document.getElementById('modal-add-mesa-material').innerHTML = '<option value="">Crie uma jornada primeiro</option>';
+                } else {
+                    selJornada.innerHTML = '<option value="">Selecione...</option>' + minhasJornadas.map(j => `<option value="${escapeHtml(j.id)}">${escapeHtml(j.titulo)}</option>`).join('');
+                    document.getElementById('modal-add-mesa-material').innerHTML = '<option value="">Aguardando jornada...</option>';
+                }
+            }
+        });
+    }
+});
+
+window.atualizarMateriaisParaMesa = function() {
+    const idJor = document.getElementById('modal-add-mesa-jornada').value;
+    const selMat = document.getElementById('modal-add-mesa-material');
+    if(!idJor || !selMat) return;
+
+    const jor = minhasJornadas.find(j => j.id === idJor);
+    if(!jor) return;
+
+    let optionsHtml = '';
+    (jor.materias || []).forEach(m => {
+        (m.materiais || []).forEach(mat => {
+            // Guarda url, nome e tipo nos data-attributes da option para facilidade
+            optionsHtml += `<option value="${escapeHtml(mat.url)}" data-nome="${escapeHtml(mat.nome)}" data-tipo="${escapeHtml(mat.tipo)}">[${escapeHtml(m.nome)}] ${escapeHtml(mat.nome)}</option>`;
+        });
+    });
+
+    if(optionsHtml === '') {
+        selMat.innerHTML = '<option value="">Nenhum material indexado nesta jornada</option>';
+    } else {
+        selMat.innerHTML = '<option value="">Selecione o arquivo...</option>' + optionsHtml;
+    }
+};
+
+window.puxarMaterialDaJornadaParaMesa = function() {
+    const selMat = document.getElementById('modal-add-mesa-material');
+    if(!selMat || !selMat.value) {
+        if(typeof showToast === 'function') showToast("Selecione um material primeiro.", "warning");
+        return;
+    }
+    
+    const selectedOpt = selMat.options[selMat.selectedIndex];
+    const url = selectedOpt.value;
+    const nome = selectedOpt.getAttribute('data-nome');
+    const tipo = selectedOpt.getAttribute('data-tipo');
+
+    // Fechar este modal
+    const modalEl = document.getElementById('modalAdicionarMaterialMesa');
+    if(modalEl) {
+        try { bootstrap.Modal.getInstance(modalEl).hide(); } catch(e){}
+    }
+
+    // Chama a função global que injeta a renderização do material na mesa
+    if(typeof levarMaterialParaMesa === 'function') {
+        levarMaterialParaMesa(url, nome, tipo);
+    }
+};
+
+/* ==========================================================================
+   FERRAMENTA DE LAÇO (LASSO SELECTION) PARA A MESA DE ESTUDOS
+   ========================================================================== */
+window.initLassoSelection = function() {
+    const container = document.getElementById('pdf-preview-area');
+    if (!container) return;
+
+    let isDrawing = false;
+    let startX, startY;
+    let lassoBox = document.getElementById('lasso-box');
+
+    // Cria a caixa visual do laço se não existir
+    if (!lassoBox) {
+        lassoBox = document.createElement('div');
+        lassoBox.id = 'lasso-box';
+        lassoBox.style.position = 'absolute';
+        lassoBox.style.border = '2px dashed var(--primary)';
+        lassoBox.style.backgroundColor = 'rgba(59, 130, 246, 0.15)'; // Azul transparente
+        lassoBox.style.pointerEvents = 'none'; // Para não bloquear o rato
+        lassoBox.style.display = 'none';
+        lassoBox.style.zIndex = '9999';
+        document.body.appendChild(lassoBox);
+    }
+
+    // Iniciar o Laço (Mousedown)
+    container.addEventListener('mousedown', (e) => {
+        // Ignora se o clique for com o botão direito (menu de contexto)
+        if (e.button !== 0) return;
+        
+        // Ignora se clicar já em cima de uma página (para não atrapalhar o Drag & Drop de mover folhas)
+        // Ignora se clicar num botão
+        if (e.target.closest('.pdf-page-wrapper') || e.target.closest('button')) return;
+
+        isDrawing = true;
+        
+        // Regista onde o clique começou (incluindo o scroll da página)
+        startX = e.pageX;
+        startY = e.pageY;
+        
+        lassoBox.style.left = startX + 'px';
+        lassoBox.style.top = startY + 'px';
+        lassoBox.style.width = '0px';
+        lassoBox.style.height = '0px';
+        lassoBox.style.display = 'block';
+
+        // Limpa as seleções antigas se o utilizador não estiver a segurar a tecla SHIFT
+        if (!e.shiftKey) {
+            pdfState.forEach(p => p.selected = false);
+            document.querySelectorAll('.pdf-page-wrapper.selected').forEach(el => el.classList.remove('selected'));
+            document.querySelectorAll('.pdf-extract-check').forEach(chk => chk.checked = false);
+        }
+    });
+
+    // Desenhar o Laço (Mousemove)
+    document.addEventListener('mousemove', (e) => {
+        if (!isDrawing) return;
+
+        const currentX = e.pageX;
+        const currentY = e.pageY;
+
+        // Calcula a largura, altura e ponto de origem consoante a direção do arraste
+        const width = Math.abs(currentX - startX);
+        const height = Math.abs(currentY - startY);
+        const left = Math.min(currentX, startX);
+        const top = Math.min(currentY, startY);
+
+        lassoBox.style.left = left + 'px';
+        lassoBox.style.top = top + 'px';
+        lassoBox.style.width = width + 'px';
+        lassoBox.style.height = height + 'px';
+        
+        // Faz a matemática de colisão
+        verificarIntersecaoLaco(left, top, width, height);
+    });
+
+    // Terminar o Laço (Mouseup)
+    document.addEventListener('mouseup', () => {
+        if (isDrawing) {
+            isDrawing = false;
+            lassoBox.style.display = 'none';
+            // Chama a atualização visual do Submenu de IA, se existir a função
+            if (typeof renderContextMenu === 'function') renderContextMenu();
+        }
+    });
+
+    // Função matemática que deteta colisão entre o quadrado do laço e as páginas
+    function verificarIntersecaoLaco(lX, lY, lW, lH) {
+        const lassoRect = { left: lX, top: lY, right: lX + lW, bottom: lY + lH };
+        const pages = document.querySelectorAll('.pdf-page-wrapper');
+        
+        pages.forEach((pageEl, domIndex) => {
+            const rect = pageEl.getBoundingClientRect();
+            // Transforma a posição relativa do ecrã numa posição absoluta
+            const pRect = {
+                left: rect.left + window.scrollX,
+                top: rect.top + window.scrollY,
+                right: rect.right + window.scrollX,
+                bottom: rect.bottom + window.scrollY
+            };
+
+            // Lógica de colisão 2D
+            const isIntersecting = !(
+                pRect.right < lassoRect.left || 
+                pRect.left > lassoRect.right || 
+                pRect.bottom < lassoRect.top || 
+                pRect.top > lassoRect.bottom
+            );
+
+            // A página do DOM pode não ter o data-index explícito, então usamos o index iterado
+            // Assumindo que a ordem do DOM (querySelectorAll) bate com a ordem do pdfState
+            if (pdfState[domIndex]) {
+                if (isIntersecting) {
+                    pdfState[domIndex].selected = true;
+                    pageEl.classList.add('selected');
+                    const chk = pageEl.querySelector('.pdf-extract-check');
+                    if(chk) chk.checked = true;
+                }
+            }
+        });
+    }
+};
+
+/* --------------------------------------------------------------------------
+   GERENCIADOR DE ALTERAÇÃO E TRANSIÇÃO DE FERRAMENTAS DA MESA
+   -------------------------------------------------------------------------- */
+let ultimaFerramentaMesaValida = "";
+
+window.executarTrocaFerramentaMesaComAviso = function(selectElement) {
+    const novaFerramenta = selectElement.value;
+    
+    if (novaFerramenta === ultimaFerramentaMesaValida) return;
+
+    if (ultimaFerramentaMesaValida !== "" && typeof pdfState !== 'undefined' && pdfState && pdfState.length > 0) {
+        
+        // NOVA CHAMADA: Usando o modal customizado
+        window.confirmarAcao(
+            "Mudar Ferramenta?", 
+            "Mudar de ferramenta IA irá redefinir e limpar a sua mesa de estudos atual. Deseja prosseguir?", 
+            "Sim, limpar", 
+            () => {
+                // AÇÃO CONFIRMADA
+                pdfState = [];
+                if (typeof renderPdfGrid === 'function') renderPdfGrid();
+                
+                ultimaFerramentaMesaValida = novaFerramenta;
+                if (typeof openTool === 'function') openTool(novaFerramenta);
+                if (typeof showToast === 'function') showToast("Modo de estudo ativado com sucesso!", "info");
+            },
+            () => {
+                // AÇÃO CANCELADA (Rollback)
+                selectElement.value = ultimaFerramentaMesaValida;
+            }
+        );
+        return;
+    }
+
+    ultimaFerramentaMesaValida = novaFerramenta;
+    
+    if (typeof openTool === 'function') {
+        openTool(novaFerramenta);
+    }
+    
+    if (typeof showToast === 'function') {
+        showToast("Modo de estudo ativado com sucesso!", "info");
+    }
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+    const seletor = document.getElementById('seletor-ferramenta-mesa');
+    if (seletor) {
+        ultimaFerramentaMesaValida = seletor.value || "";
+    }
+});
+
+/* --------------------------------------------------------------------------
+   MOTOR GLOBAL DE CONFIRMAÇÕES (UI CUSTOMIZADA)
+   -------------------------------------------------------------------------- */
+window.confirmarAcao = function(titulo, mensagem, textoConfirmar, acaoConfirmar, acaoCancelar = null) {
+    let modal = document.getElementById('modal-confirmacao-global');
+    if (modal) modal.remove();
+
+    modal = document.createElement('div');
+    modal.id = 'modal-confirmacao-global';
+    modal.className = 'modal fade';
+    modal.setAttribute('tabindex', '-1');
+
+    modal.innerHTML = `
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content rounded-4 border-0 shadow-lg text-center p-4" style="background: var(--bg-card);">
+            <i class="material-icons text-warning mb-3" style="font-size: 48px;">warning</i>
+            <h5 class="fw-bold text-dark">${titulo}</h5>
+            <p class="text-muted small mb-4">${mensagem}</p>
+            <div class="d-flex gap-2 w-100">
+                <button class="btn btn-light w-50 rounded-pill fw-bold border" id="btn-cancel-confirm">Cancelar</button>
+                <button class="btn btn-warning w-50 rounded-pill fw-bold text-dark shadow-sm" id="btn-ok-confirm">${textoConfirmar}</button>
+            </div>
+        </div>
+    </div>`;
+
+    document.body.appendChild(modal);
+    const bsModal = new bootstrap.Modal(modal);
+
+    document.getElementById('btn-ok-confirm').addEventListener('click', () => {
+        bsModal.hide();
+        if (acaoConfirmar) acaoConfirmar();
+    });
+
+    document.getElementById('btn-cancel-confirm').addEventListener('click', () => {
+        bsModal.hide();
+        if (acaoCancelar) acaoCancelar();
+    });
+
+    bsModal.show();
+};
 
 </script>
